@@ -1,0 +1,13 @@
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName=@alt_names
+
+[alt_names]
+DNS.1=relay
+DNS.2=relay.local
+DNS.3=api.phone.local
+DNS.4=photo.phone.local
+IP.1=127.0.0.1
+IP.2=192.168.31.108

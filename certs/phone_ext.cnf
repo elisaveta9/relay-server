@@ -1,0 +1,9 @@
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=clientAuth
+subjectAltName=@alt_names
+[alt_names]
+DNS.1=phone.local
+DNS.2=api.phone.local
+DNS.3=photo.phone.local

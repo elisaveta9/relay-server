@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package tunnel;
+
+option go_package = "relay/proto/tunnel;tunnelpb";
+option java_package = "com.projects.httpsserverapp.tunnel.v1";
+option java_multiple_files = true;
+
+service TunnelService {
+  rpc Tunnel(stream Frame) returns (stream Frame);
+}
+
+enum FrameType {
+  FRAME_UNSPECIFIED = 0;
+
+  FRAME_OPEN   = 1; // открыть TCP stream
+  FRAME_DATA   = 2;
+  FRAME_CLOSE  = 3;
+
+  FRAME_PING   = 4;
+  FRAME_PONG   = 5;
+
+  FRAME_BIND_REQUEST  = 10; // device → relay
+  FRAME_BIND_OK       = 11; // relay → device
+  FRAME_BIND_REJECTED = 12; // relay → device
+}
+
+message Frame {
+  FrameType type = 1;
+  uint32 stream_id = 2;
+  bytes payload = 3;
+}

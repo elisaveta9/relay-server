@@ -1,0 +1,6 @@
+== Info: Added api.phone.local:4433:192.168.31.108 to DNS cache
+== Info: Hostname api.phone.local was found in DNS cache
+== Info:   Trying 192.168.31.108:4433...
+== Info: schannel: disabled automatic use of client certificate
+== Info: schannel: AcquireCredentialsHandle failed: SEC_E_ALGORITHM_MISMATCH (0x80090331) - Взаимодействие клиента и сервера невозможно, т.к. у них разный алгоритм работы.
+== Info: closing connection #0

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Relay Admin Panel</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    input, button {
+      padding: 6px;
+      font-size: 14px;
+    }
+    ul {
+      padding-left: 20px;
+    }
+    li {
+      margin: 6px 0;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Relay Admin Panel</h1>
+
+<label>
+  API Key:
+  <input id="apiKey" type="password" style="width: 100%" />
+</label>
+
+<hr>
+
+<h3>Registered domains</h3>
+<button onclick="loadDomains()">Refresh</button>
+<ul id="domains"></ul>
+
+<hr>
+
+<h3>Add domain</h3>
+<input id="newDomain" placeholder="example.phone.local" />
+<button onclick="addDomain()">Add</button>
+
+<p id="status" class="error"></p>
+
+<script>
+const apiBase = "/domains";
+
+function headers() {
+  return {
+    "apikey": document.getElementById("apiKey").value
+  };
+}
+
+async function loadDomains() {
+  const res = await fetch(apiBase, { headers: headers() });
+  if (!res.ok) {
+    showError(res);
+    return;
+  }
+
+  const text = await res.text();
+  const list = document.getElementById("domains");
+  list.innerHTML = "";
+
+  text.trim().split("\n").forEach(domain => {
+    if (!domain) return;
+
+    const li = document.createElement("li");
+    li.textContent = domain + " ";
+
+    const btn = document.createElement("button");
+    btn.textContent = "Delete";
+    btn.onclick = () => deleteDomain(domain);
+
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+}
+
+async function addDomain() {
+  const domain = document.getElementById("newDomain").value;
+  if (!domain) return;
+
+  const res = await fetch(`${apiBase}?domain=${encodeURIComponent(domain)}`, {
+    method: "POST",
+    headers: headers()
+  });
+
+  if (!res.ok) {
+    showError(res);
+    return;
+  }
+
+  document.getElementById("newDomain").value = "";
+  loadDomains();
+}
+
+async function deleteDomain(domain) {
+  const res = await fetch(`${apiBase}?domain=${encodeURIComponent(domain)}`, {
+    method: "DELETE",
+    headers: headers()
+  });
+
+  if (!res.ok) {
+    showError(res);
+    return;
+  }
+
+  loadDomains();
+}
+
+function showError(res) {
+  document.getElementById("status").textContent =
+    `Error: ${res.status} ${res.statusText}`;
+}
+</script>
+
+</body>
+</html>
