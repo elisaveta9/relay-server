@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 
+	"relay/device"
+	tunnelpb "relay/proto/tunnel"
 	"relay/registry"
 )
 
@@ -40,19 +42,25 @@ func domainsHandler(w http.ResponseWriter, r *http.Request) {
 	case "DELETE":
 		domain := strings.ToLower(r.URL.Query().Get("domain"))
 
+		var dev *device.Device
+		var existed bool
+
 		registry.Global.Mu.Lock()
-		if _, exists := registry.Global.Domains[domain]; exists {
+		if d, ok := registry.Global.Domains[domain]; ok {
+			existed = true
+			dev = d
 			delete(registry.Global.Domains, domain)
-			adminLogger.Printf(
-				"ADMIN DELETE domain=%s ip=%s",
-				domain, r.RemoteAddr,
-			)
 		}
 		registry.Global.Mu.Unlock()
 
-		w.Write([]byte("deleted\n"))
+		if existed && dev != nil {
+			dev.SendFrame(&tunnelpb.Frame{
+				Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
+				Payload: []byte(domain),
+			})
+		}
 
 	default:
-		http.Error(w, "method not allowed", 405)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }

@@ -23,7 +23,7 @@ type Device struct {
 func NewDevice(stream tunnelpb.TunnelService_TunnelServer) *Device {
 	d := &Device{
 		stream:     stream,
-		sendCh:     make(chan *tunnelpb.Frame, 128), // backpressure here
+		sendCh:     make(chan *tunnelpb.Frame, 128),
 		done:       make(chan struct{}),
 		streams:    make(map[uint32]net.Conn),
 		streamDone: make(map[uint32]chan struct{}),

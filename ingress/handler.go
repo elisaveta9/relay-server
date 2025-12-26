@@ -35,7 +35,7 @@ func handleClientTCP(conn net.Conn) {
 	streamID := dev.AllocateStreamID()
 	done := dev.AddStream(streamID, conn)
 
-	log.Printf("Client [%s] → device (stream %d)\n", sni, streamID)
+	log.Printf("Client [%s] -> device (stream %d)\n", sni, streamID)
 
 	dev.SendFrame(&tunnelpb.Frame{
 		Type:     tunnelpb.FrameType_FRAME_OPEN,
