@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"log"
 	"net"
+	"relay/storage"
 	"time"
 
 	"google.golang.org/grpc"
@@ -14,7 +15,7 @@ import (
 	tunnelpb "relay/proto/tunnel"
 )
 
-func Serve(addr string, tlsCfg *tls.Config) {
+func Serve(addr string, tlsCfg *tls.Config, repo *storage.Repository) {
 	grpcServer := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
@@ -23,8 +24,8 @@ func Serve(addr string, tlsCfg *tls.Config) {
 		}),
 	)
 
-	tunnelpb.RegisterTunnelServiceServer(grpcServer, &TunnelServiceImpl{})
-	controlpb.RegisterControlServiceServer(grpcServer, &ControlServiceImpl{})
+	tunnelpb.RegisterTunnelServiceServer(grpcServer, &TunnelServiceImpl{Store: repo})
+	controlpb.RegisterControlServiceServer(grpcServer, &ControlServiceImpl{Store: repo})
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

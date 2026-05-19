@@ -1,66 +1,108 @@
 package admin
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
-	"relay/device"
 	tunnelpb "relay/proto/tunnel"
 	"relay/registry"
+	"relay/storage"
 )
 
-func domainsHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
+func domainsHandler(repo *storage.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
 
-	case "GET":
-		registry.Global.Mu.Lock()
-		defer registry.Global.Mu.Unlock()
-		for d := range registry.Global.Domains {
-			w.Write([]byte(d + "\n"))
-		}
+		case "GET":
+			domains, err := repo.ListDomains(r.Context())
+			if err != nil {
+				http.Error(w, "cannot list domains", http.StatusInternalServerError)
+				return
+			}
+			for _, domain := range domains {
+				w.Write([]byte(domain.FQDN + "\n"))
+			}
 
-	case "POST":
-		domain := strings.ToLower(r.URL.Query().Get("domain"))
-		if domain == "" {
-			http.Error(w, "domain required", http.StatusBadRequest)
-			return
-		}
+		case "POST":
+			domain := strings.ToLower(r.URL.Query().Get("domain"))
+			if domain == "" {
+				http.Error(w, "domain required", http.StatusBadRequest)
+				return
+			}
 
-		registry.Global.Mu.Lock()
-		if _, exists := registry.Global.Domains[domain]; exists {
-			w.Write([]byte("already registered\n"))
-		} else {
-			registry.Global.Domains[domain] = nil
+			fingerprint := ownerFingerprint(r)
+			if fingerprint == "" {
+				http.Error(w, "cert_fingerprint required", http.StatusBadRequest)
+				return
+			}
+
+			created, err := repo.RegisterDomainForFingerprint(r.Context(), fingerprint, domain)
+			if err != nil {
+				writeStorageHTTPError(w, err)
+				return
+			}
 			adminLogger.Printf(
-				"ADMIN ADD domain=%s ip=%s",
-				domain, r.RemoteAddr,
+				"ADMIN ADD domain=%s owner=%s ip=%s",
+				created.FQDN, fingerprint, r.RemoteAddr,
 			)
 			w.Write([]byte("registered\n"))
+
+		case "DELETE":
+			domain := strings.ToLower(r.URL.Query().Get("domain"))
+
+			deleted, existed, err := repo.DeleteDomain(r.Context(), domain)
+			if err != nil {
+				writeStorageHTTPError(w, err)
+				return
+			}
+
+			if existed && deleted != nil {
+				notifyUnboundDevice(deleted.FQDN)
+				adminLogger.Printf(
+					"ADMIN DELETE domain=%s ip=%s",
+					deleted.FQDN, r.RemoteAddr,
+				)
+			}
+
+			w.Write([]byte("deleted\n"))
+
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
-		registry.Global.Mu.Unlock()
+	}
+}
 
-	case "DELETE":
-		domain := strings.ToLower(r.URL.Query().Get("domain"))
-
-		var dev *device.Device
-		var existed bool
-
-		registry.Global.Mu.Lock()
-		if d, ok := registry.Global.Domains[domain]; ok {
-			existed = true
-			dev = d
-			delete(registry.Global.Domains, domain)
+func ownerFingerprint(r *http.Request) string {
+	for _, key := range []string{"cert_fingerprint", "fingerprint", "device_fingerprint"} {
+		if value := strings.TrimSpace(r.URL.Query().Get(key)); value != "" {
+			return value
 		}
-		registry.Global.Mu.Unlock()
+	}
+	return strings.TrimSpace(r.Header.Get("X-Device-Fingerprint"))
+}
 
-		if existed && dev != nil {
-			dev.SendFrame(&tunnelpb.Frame{
-				Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
-				Payload: []byte(domain),
-			})
-		}
+func notifyUnboundDevice(domain string) {
+	dev, existed := registry.Global.Unbind(domain)
+	if existed && dev != nil {
+		dev.SendFrame(&tunnelpb.Frame{
+			Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
+			Payload: []byte(domain),
+		})
+	}
+}
 
+func writeStorageHTTPError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, storage.ErrFingerprintInvalid):
+		http.Error(w, "invalid cert_fingerprint", http.StatusBadRequest)
+	case errors.Is(err, storage.ErrDomainInvalid):
+		http.Error(w, "invalid domain", http.StatusBadRequest)
+	case errors.Is(err, storage.ErrDomainAlreadyUsed):
+		http.Error(w, "domain already registered to another device", http.StatusConflict)
+	case errors.Is(err, storage.ErrDeviceRevoked):
+		http.Error(w, "device is revoked", http.StatusForbidden)
 	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, "storage error", http.StatusInternalServerError)
 	}
 }

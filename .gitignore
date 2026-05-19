@@ -1,0 +1,6 @@
+
+certs/
+admin.log
+*.bat
+*.log
+report/

@@ -1,6 +1,7 @@
 package ingress
 
 import (
+	"bufio"
 	"log"
 	"net"
 
@@ -13,7 +14,8 @@ import (
 func handleClientTCP(conn net.Conn) {
 	defer conn.Close()
 
-	sni, hello, err := peekClientHello(conn)
+	br := bufio.NewReader(conn)
+	sni, hello, err := peekClientHello(br)
 	if err != nil {
 		log.Println("peek failed:", err)
 		return
@@ -21,10 +23,7 @@ func handleClientTCP(conn net.Conn) {
 
 	log.Println("Client SNI:", sni)
 
-	registry.Global.Mu.Lock()
-	dev := registry.Global.Domains[sni]
-	log.Println("Known domains:", util.Keys(registry.Global.Domains))
-	registry.Global.Mu.Unlock()
+	dev, _ := registry.Global.Get(sni)
 
 	if dev == nil {
 		log.Println("No device bound for domain:", sni)
@@ -35,7 +34,13 @@ func handleClientTCP(conn net.Conn) {
 	streamID := dev.AllocateStreamID()
 	done := dev.AddStream(streamID, conn)
 
-	log.Printf("Client [%s] -> device (stream %d)\n", sni, streamID)
+	log.Printf(
+		"Client [%s] -> device fingerprint=%s session=%s stream=%d\n",
+		sni,
+		dev.Fingerprint,
+		dev.SessionID,
+		streamID,
+	)
 
 	dev.SendFrame(&tunnelpb.Frame{
 		Type:     tunnelpb.FrameType_FRAME_OPEN,
@@ -49,12 +54,19 @@ func handleClientTCP(conn net.Conn) {
 		Payload:  hello,
 	})
 
+	if len(hello) > 0 {
+		if _, err := br.Discard(len(hello)); err != nil {
+			log.Println("discard hello failed:", err)
+			return
+		}
+	}
+
 	go func() {
 		buf := util.BufPool.Get().([]byte)
 		defer util.BufPool.Put(buf)
 
 		for {
-			n, err := conn.Read(buf)
+			n, err := br.Read(buf)
 			if err != nil {
 				dev.SendFrame(&tunnelpb.Frame{
 					Type:     tunnelpb.FrameType_FRAME_CLOSE,

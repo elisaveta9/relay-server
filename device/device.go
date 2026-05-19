@@ -9,6 +9,9 @@ import (
 )
 
 type Device struct {
+	Fingerprint string
+	SessionID   string
+
 	stream    tunnelpb.TunnelService_TunnelServer
 	sendCh    chan *tunnelpb.Frame
 	done      chan struct{}
@@ -20,14 +23,16 @@ type Device struct {
 	nextID     uint32
 }
 
-func NewDevice(stream tunnelpb.TunnelService_TunnelServer) *Device {
+func NewDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, sessionID string) *Device {
 	d := &Device{
-		stream:     stream,
-		sendCh:     make(chan *tunnelpb.Frame, 128),
-		done:       make(chan struct{}),
-		streams:    make(map[uint32]net.Conn),
-		streamDone: make(map[uint32]chan struct{}),
-		nextID:     1,
+		Fingerprint: fingerprint,
+		SessionID:   sessionID,
+		stream:      stream,
+		sendCh:      make(chan *tunnelpb.Frame, 128),
+		done:        make(chan struct{}),
+		streams:     make(map[uint32]net.Conn),
+		streamDone:  make(map[uint32]chan struct{}),
+		nextID:      1,
 	}
 
 	go d.writer()
@@ -42,10 +47,9 @@ func (d *Device) Close() {
 
 func (d *Device) SendFrame(f *tunnelpb.Frame) {
 	select {
-	case d.sendCh <- f:
 	case <-d.done:
-	default:
-		log.Println("device backpressure: drop frame")
+		return
+	case d.sendCh <- f:
 	}
 }
 

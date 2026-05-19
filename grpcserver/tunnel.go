@@ -1,34 +1,54 @@
 package grpcserver
 
 import (
+	"context"
+	"errors"
 	"log"
 	"strings"
+	"time"
 
 	"relay/device"
 	"relay/registry"
+	"relay/storage"
 
 	tunnelpb "relay/proto/tunnel"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type TunnelServiceImpl struct {
 	tunnelpb.UnimplementedTunnelServiceServer
+	Store *storage.Repository
 }
 
 func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) error {
-	dev := device.NewDevice(stream)
-	log.Println("Device connected")
+	fingerprint, err := storage.ClientCertFingerprint(stream.Context())
+	if err != nil {
+		return status.Errorf(codes.Unauthenticated, "client certificate is required: %v", err)
+	}
+
+	session, err := s.Store.OpenDeviceSession(stream.Context(), fingerprint)
+	if err != nil {
+		return storageError("open device session", err)
+	}
+
+	dev := device.NewDevice(stream, fingerprint, session.ID.String())
+	log.Printf("Device connected: fingerprint=%s session=%s\n", fingerprint, dev.SessionID)
 
 	defer func() {
-		log.Println("Device disconnected")
+		log.Printf("Device disconnected: fingerprint=%s session=%s\n", fingerprint, dev.SessionID)
 		dev.Close()
-		registry.Global.Mu.Lock()
-		for d, v := range registry.Global.Domains {
-			if v == dev {
-				registry.Global.Domains[d] = nil
-				log.Println("Domain unbound from device:", d)
-			}
+
+		for _, domain := range registry.Global.UnbindDevice(dev) {
+			log.Printf("Domain unbound from device: domain=%s fingerprint=%s session=%s\n", domain, dev.Fingerprint, dev.SessionID)
 		}
-		registry.Global.Mu.Unlock()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.Store.CloseDeviceSession(ctx, session.ID); err != nil {
+			log.Println("close device session failed:", err)
+		}
 	}()
 
 	for {
@@ -39,41 +59,43 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 
 		switch frame.Type {
 
-		// case tunnelpb.FrameType_FRAME_OPEN:
-		// 	domain := strings.ToLower(string(frame.Payload))
-		// 	log.Println("BIND request from device for domain:", domain)
-		// 	registry.Global.Mu.Lock()
-		// 	if _, ok := registry.Global.Domains[domain]; ok {
-		// 		registry.Global.Domains[domain] = dev
-		// 		log.Println("Domain bound to device:", domain)
-		// 	} else {
-		// 		log.Println("Bind rejected, domain not registered:", domain)
-		// 	}
-		// 	registry.Global.Mu.Unlock()
-
 		case tunnelpb.FrameType_FRAME_BIND_REQUEST:
-			domain := strings.ToLower(string(frame.Payload))
-			log.Println("BIND request from device for domain:", domain)
+			requestedDomain := strings.ToLower(strings.TrimSpace(string(frame.Payload)))
+			log.Printf("BIND request: domain=%s fingerprint=%s session=%s\n", requestedDomain, dev.Fingerprint, dev.SessionID)
 
-			registry.Global.Mu.Lock()
-			if _, ok := registry.Global.Domains[domain]; ok {
-				registry.Global.Domains[domain] = dev
-				registry.Global.Mu.Unlock()
-
-				log.Println("Domain bound to device:", domain)
-				dev.SendFrame(&tunnelpb.Frame{
-					Type:    tunnelpb.FrameType_FRAME_BIND_OK,
-					Payload: []byte(domain),
-				})
-			} else {
-				registry.Global.Mu.Unlock()
-
-				log.Println("Bind rejected, domain not registered:", domain)
-				dev.SendFrame(&tunnelpb.Frame{
-					Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
-					Payload: []byte(domain),
-				})
+			domain, err := storage.NormalizeDomain(requestedDomain)
+			if err != nil {
+				log.Println("Bind rejected, invalid domain:", requestedDomain)
+				sendBindRejected(dev, requestedDomain)
+				continue
 			}
+
+			if _, err := s.Store.AuthorizeBind(stream.Context(), fingerprint, domain); err != nil {
+				if errors.Is(err, storage.ErrDomainNotOwned) {
+					log.Println("Bind rejected, device does not own domain:", domain)
+				} else {
+					log.Println("Bind rejected:", err)
+				}
+				sendBindRejected(dev, domain)
+				continue
+			}
+
+			previous, existed := registry.Global.Bind(domain, dev)
+			if existed && previous != nil && previous != dev {
+				log.Printf(
+					"Domain active binding replaced: domain=%s previous_fingerprint=%s previous_session=%s new_fingerprint=%s new_session=%s\n",
+					domain,
+					previous.Fingerprint,
+					previous.SessionID,
+					dev.Fingerprint,
+					dev.SessionID,
+				)
+			}
+			log.Printf("Domain bound to device: domain=%s fingerprint=%s session=%s\n", domain, dev.Fingerprint, dev.SessionID)
+			dev.SendFrame(&tunnelpb.Frame{
+				Type:    tunnelpb.FrameType_FRAME_BIND_OK,
+				Payload: []byte(domain),
+			})
 
 		case tunnelpb.FrameType_FRAME_DATA:
 			if c, ok := dev.GetClient(frame.StreamId); ok {
@@ -87,8 +109,16 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 
 		case tunnelpb.FrameType_FRAME_PING:
 			dev.SendFrame(&tunnelpb.Frame{
-				Type: tunnelpb.FrameType_FRAME_PONG,
+				Type:    tunnelpb.FrameType_FRAME_PONG,
+				Payload: frame.Payload,
 			})
 		}
 	}
+}
+
+func sendBindRejected(dev *device.Device, domain string) {
+	dev.SendFrame(&tunnelpb.Frame{
+		Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
+		Payload: []byte(domain),
+	})
 }
