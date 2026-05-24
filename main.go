@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"os"
 
@@ -45,6 +46,14 @@ func main() {
 	}
 
 	admin.InitLogger()
+
+	lf, err := os.OpenFile("server.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		log.Printf("warning: cannot open server.log: %v", err)
+	} else {
+		mw := io.MultiWriter(os.Stderr, lf)
+		log.SetOutput(mw)
+	}
 
 	go admin.Serve(":8443", repo)
 	go grpcserver.Serve(":50051", tlsCfg, repo)
