@@ -81,7 +81,7 @@ func domainsV1Handler(repo *storage.Repository, withID bool) http.HandlerFunc {
 				http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 				return
 			}
-			handleDisableDomain(w, r, repo, path)
+			handleDeleteDomain(w, r, repo, path)
 		default:
 			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 		}
@@ -207,31 +207,31 @@ func handlePatchDomain(w http.ResponseWriter, r *http.Request, repo *storage.Rep
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func handleDisableDomain(w http.ResponseWriter, r *http.Request, repo *storage.Repository, idStr string) {
+func handleDeleteDomain(w http.ResponseWriter, r *http.Request, repo *storage.Repository, idStr string) {
 	id, err := uuid.Parse(strings.TrimSpace(idStr))
 	if err != nil {
 		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
 		return
 	}
 
-	disabled, err := repo.DisableDomainByID(r.Context(), id)
+	deleted, err := repo.DeleteDomainByID(r.Context(), id)
 	if errors.Is(err, storage.ErrDomainNotFound) {
 		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 		return
 	}
 	if err != nil {
-		http.Error(w, `{"error":"cannot disable domain"}`, http.StatusInternalServerError)
+		http.Error(w, `{"error":"cannot delete domain"}`, http.StatusInternalServerError)
 		return
 	}
 
-	notifyUnboundDevice(disabled.FQDN)
+	notifyUnboundDevice(deleted.FQDN)
 
 	resp := domainCreateResponse{
-		ID:        disabled.ID.String(),
-		FQDN:      disabled.FQDN,
-		Status:    disabled.Status,
-		DeviceID:  disabled.DeviceID.String(),
-		CreatedAt: disabled.CreatedAt,
+		ID:        deleted.ID.String(),
+		FQDN:      deleted.FQDN,
+		Status:    deleted.Status,
+		DeviceID:  deleted.DeviceID.String(),
+		CreatedAt: deleted.CreatedAt,
 	}
 	_ = json.NewEncoder(w).Encode(resp)
 }

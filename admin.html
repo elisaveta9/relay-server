@@ -74,74 +74,98 @@ function renderJsonErrorText(payload) {
 
 async function loadDomains() {
   setStatus("Refreshing...");
-  const res = await fetch(`${apiBase}/domains`, { headers: headers() });
-  if (!res.ok) return showErrorFromResponse(res);
+  try {
+    const res = await fetch(`${apiBase}/domains`, { headers: headers() });
+    if (!res.ok) return showErrorFromResponse(res);
 
-  const list = await res.json();
-  const tbody = document.getElementById("domains");
-  tbody.innerHTML = "";
+    const list = await res.json();
+    const tbody = document.getElementById("domains");
+    tbody.innerHTML = "";
 
-  list.forEach(d => {
-    const tr = document.createElement("tr");
+    list.forEach(d => {
+      const tr = document.createElement("tr");
 
-    const tdFqdn = document.createElement("td");
-    const fqdnText = document.createElement("div");
-    fqdnText.textContent = d.fqdn || "";
+      const tdFqdn = document.createElement("td");
+      const fqdnText = document.createElement("div");
+      fqdnText.textContent = d.fqdn || "";
 
-    const idWrap = document.createElement("div");
-    idWrap.className = "muted";
+      const idWrap = document.createElement("div");
+      idWrap.className = "muted";
 
-    const code = document.createElement("code");
-    code.textContent = d.id || "";
+      const code = document.createElement("code");
+      code.textContent = d.id || "";
 
-    idWrap.appendChild(code);
+      idWrap.appendChild(code);
 
-    tdFqdn.appendChild(fqdnText);
-    tdFqdn.appendChild(idWrap);
+      tdFqdn.appendChild(fqdnText);
+      tdFqdn.appendChild(idWrap);
 
-    const tdStatus = document.createElement("td");
-    tdStatus.textContent = d.status || "";
+      const tdStatus = document.createElement("td");
+      tdStatus.textContent = d.status || "";
 
-    const tdDevice = document.createElement("td");
-    tdDevice.textContent = d.device_id ? d.device_id : "";
+      const tdDevice = document.createElement("td");
+      tdDevice.textContent = d.device_id ? d.device_id : "";
 
-    const tdActions = document.createElement("td");
-    tdActions.className = "row-actions";
+      const tdActions = document.createElement("td");
+      tdActions.className = "row-actions";
 
-    if (d.status === "domain_status_registered") {
-      const disableBtn = document.createElement("button");
-      disableBtn.textContent = "Disable";
-      disableBtn.onclick = async () => {
-        disableBtn.disabled = true;
+      if (d.status === "domain_status_registered") {
+        const disableBtn = document.createElement("button");
+        disableBtn.textContent = "Disable";
+        disableBtn.onclick = async () => {
+          disableBtn.disabled = true;
+          try {
+            await setDomainStatus(d.id, "domain_status_disabled");
+          } finally {
+            disableBtn.disabled = false;
+          }
+        };
+        tdActions.appendChild(disableBtn);
+      } else if (d.status === "domain_status_disabled") {
+        const enableBtn = document.createElement("button");
+        enableBtn.textContent = "Enable";
+        enableBtn.onclick = async () => {
+          enableBtn.disabled = true;
+          try {
+            await setDomainStatus(d.id, "domain_status_registered");
+          } finally {
+            enableBtn.disabled = false;
+          }
+        };
+        tdActions.appendChild(enableBtn);
+      }
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "Delete";
+      deleteBtn.onclick = async () => {
+        if (!confirm("Delete domain?")) return;
+        deleteBtn.disabled = true;
         try {
-          await setDomainStatus(d.id, "domain_status_disabled");
+          const res = await fetch(`${apiBase}/domains/${encodeURIComponent(d.id)}`, {
+            method: "DELETE",
+            headers: headers()
+          });
+          if (!res.ok) return showErrorFromResponse(res);
+          await loadDomains();
+        } catch (err) {
+          setStatus(`Error: network failure${err && err.message ? " - " + err.message : ""}`);
         } finally {
-          disableBtn.disabled = false;
+          deleteBtn.disabled = false;
         }
       };
-      tdActions.appendChild(disableBtn);
-    } else if (d.status === "domain_status_disabled") {
-      const enableBtn = document.createElement("button");
-      enableBtn.textContent = "Enable";
-      enableBtn.onclick = async () => {
-        enableBtn.disabled = true;
-        try {
-          await setDomainStatus(d.id, "domain_status_registered");
-        } finally {
-          enableBtn.disabled = false;
-        }
-      };
-      tdActions.appendChild(enableBtn);
-    }
+      tdActions.appendChild(deleteBtn);
 
-    tbody.appendChild(tr);
-    tr.appendChild(tdFqdn);
-    tr.appendChild(tdStatus);
-    tr.appendChild(tdDevice);
-    tr.appendChild(tdActions);
-  });
+      tbody.appendChild(tr);
+      tr.appendChild(tdFqdn);
+      tr.appendChild(tdStatus);
+      tr.appendChild(tdDevice);
+      tr.appendChild(tdActions);
+    });
 
-  setStatus("");
+    setStatus("");
+  } catch (err) {
+    setStatus(`Error: network failure${err && err.message ? " - " + err.message : ""}`);
+  }
 }
 
 async function addDomain() {
@@ -150,19 +174,23 @@ async function addDomain() {
   const deviceFingerprint = document.getElementById("ownerFingerprint").value.trim();
   if (!fqdn) return;
 
-  const res = await fetch(`${apiBase}/domains`, {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify({
-      fqdn,
-      device_fingerprint: deviceFingerprint
-    })
-  });
+  try {
+    const res = await fetch(`${apiBase}/domains`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        fqdn,
+        device_fingerprint: deviceFingerprint
+      })
+    });
 
-  if (!res.ok) return showErrorFromResponse(res);
+    if (!res.ok) return showErrorFromResponse(res);
 
-  document.getElementById("newDomain").value = "";
-  await loadDomains();
+    document.getElementById("newDomain").value = "";
+    await loadDomains();
+  } catch (err) {
+    setStatus(`Error: network failure${err && err.message ? " - " + err.message : ""}`);
+  }
 }
 
 async function setDomainStatus(id, status) {
@@ -175,15 +203,12 @@ async function setDomainStatus(id, status) {
     });
 
     if (!res.ok) {
-      setStatus("");
       return showErrorFromResponse(res);
     }
 
     await loadDomains();
   } catch (err) {
-    setStatus("");
-    document.getElementById("status").textContent =
-      `Error: network failure${err && err.message ? " - " + err.message : ""}`;
+    setStatus(`Error: network failure${err && err.message ? " - " + err.message : ""}`);
   }
 }
 

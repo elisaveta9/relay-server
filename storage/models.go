@@ -54,11 +54,13 @@ func (d *Device) BeforeCreate(tx *gorm.DB) error {
 }
 
 type Domain struct {
-	ID        uuid.UUID    `gorm:"type:uuid;primaryKey"`
-	FQDN      string       `gorm:"column:fqdn;size:253;not null;uniqueIndex"`
-	DeviceID  uuid.UUID    `gorm:"type:uuid;not null;index"`
-	Device    Device       `gorm:"constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;"`
-	Status    DomainStatus `gorm:"type:text;not null;default:'domain_status_registered'"`
+	ID        uuid.UUID      `gorm:"type:uuid;primaryKey"`
+	FQDN      string         `gorm:"column:fqdn;size:253;not null;uniqueIndex"`
+	DeviceID  uuid.UUID      `gorm:"type:uuid;not null;index"`
+	Device    Device         `gorm:"constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;"`
+	Status    DomainStatus   `gorm:"type:text;not null;default:'domain_status_registered'"`
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 

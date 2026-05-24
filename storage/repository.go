@@ -205,7 +205,87 @@ func (r *Repository) UpdateDomainStatus(ctx context.Context, id uuid.UUID, statu
 }
 
 func (r *Repository) DisableDomainByID(ctx context.Context, id uuid.UUID) (*Domain, error) {
-	return r.UpdateDomainStatus(ctx, id, DomainStatusDisabled)
+	if id == uuid.Nil {
+		return nil, fmt.Errorf("disable domain: nil id")
+	}
+
+	var domain Domain
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&domain, "id = ?", id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrDomainNotFound
+			}
+			return fmt.Errorf("load domain for disable: %w", err)
+		}
+
+		if err := tx.Model(&domain).Update("status", DomainStatusDisabled).Error; err != nil {
+			return fmt.Errorf("disable domain: %w", err)
+		}
+		domain.Status = DomainStatusDisabled
+
+		hist := DomainHistory{
+			DomainID: &domain.ID,
+			DeviceID: &domain.DeviceID,
+			FQDN:     domain.FQDN,
+			Action:   DomainActionDisable,
+		}
+		if err := tx.Create(&hist).Error; err != nil {
+			return fmt.Errorf("write domain history: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, ErrDomainNotFound) {
+			return nil, ErrDomainNotFound
+		}
+		return nil, err
+	}
+	return &domain, nil
+}
+
+func (r *Repository) DeleteDomainByID(ctx context.Context, id uuid.UUID) (*Domain, error) {
+	if id == uuid.Nil {
+		return nil, fmt.Errorf("delete domain: nil id")
+	}
+
+	var out Domain
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var domain Domain
+		if err := tx.First(&domain, "id = ?", id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrDomainNotFound
+			}
+			return fmt.Errorf("load domain for delete: %w", err)
+		}
+
+		if err := tx.Delete(&domain).Error; err != nil {
+			return fmt.Errorf("delete domain: %w", err)
+		}
+
+		hist := DomainHistory{
+			DomainID: &domain.ID,
+			DeviceID: &domain.DeviceID,
+			FQDN:     domain.FQDN,
+			Action:   DomainActionDelete,
+		}
+		if err := tx.Create(&hist).Error; err != nil {
+			return fmt.Errorf("write domain history: %w", err)
+		}
+
+		out = domain
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, ErrDomainNotFound) {
+			return nil, ErrDomainNotFound
+		}
+		return nil, err
+	}
+
+	return &out, nil
 }
 
 func (r *Repository) ListDomainsForFingerprint(ctx context.Context, fingerprint string) ([]Domain, error) {
