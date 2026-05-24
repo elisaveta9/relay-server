@@ -42,9 +42,18 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 
 		for _, domain := range registry.Global.UnbindDevice(dev) {
 			log.Printf("Domain unbound from device: domain=%s fingerprint=%s session=%s\n", domain, dev.Fingerprint, dev.SessionID)
+
+			if err := s.Store.AddDomainHistoryForFingerprint(
+				stream.Context(),
+				dev.Fingerprint,
+				domain,
+				storage.DomainActionUnbind,
+			); err != nil {
+				log.Println("failed to write domain history (UNBIND):", err)
+			}
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(stream.Context(), 5*time.Second)
 		defer cancel()
 		if err := s.Store.CloseDeviceSession(ctx, session.ID); err != nil {
 			log.Println("close device session failed:", err)
@@ -70,7 +79,8 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 				continue
 			}
 
-			if _, err := s.Store.AuthorizeBind(stream.Context(), fingerprint, domain); err != nil {
+			domainObj, err := s.Store.AuthorizeBind(stream.Context(), fingerprint, domain)
+			if err != nil {
 				if errors.Is(err, storage.ErrDomainNotOwned) {
 					log.Println("Bind rejected, device does not own domain:", domain)
 				} else {
@@ -92,6 +102,28 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 				)
 			}
 			log.Printf("Domain bound to device: domain=%s fingerprint=%s session=%s\n", domain, dev.Fingerprint, dev.SessionID)
+
+			if domainObj != nil {
+				if err := s.Store.AddDomainHistory(
+					stream.Context(),
+					&domainObj.ID,
+					&domainObj.DeviceID,
+					domainObj.FQDN,
+					storage.DomainActionBind,
+				); err != nil {
+					log.Println("failed to write domain history (BIND):", err)
+				}
+			} else {
+				if err := s.Store.AddDomainHistory(
+					stream.Context(),
+					nil,
+					nil,
+					domain,
+					storage.DomainActionBind,
+				); err != nil {
+					log.Println("failed to write domain history (BIND):", err)
+				}
+			}
 			dev.SendFrame(&tunnelpb.Frame{
 				Type:    tunnelpb.FrameType_FRAME_BIND_OK,
 				Payload: []byte(domain),
@@ -112,6 +144,50 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 				Type:    tunnelpb.FrameType_FRAME_PONG,
 				Payload: frame.Payload,
 			})
+
+		case tunnelpb.FrameType_FRAME_UNBIND_REQUEST:
+			requestedDomain := strings.ToLower(strings.TrimSpace(string(frame.Payload)))
+			log.Printf("UNBIND request: domain=%s fingerprint=%s session=%s\n", requestedDomain, dev.Fingerprint, dev.SessionID)
+
+			domain, err := storage.NormalizeDomain(requestedDomain)
+			if err != nil {
+				log.Println("Unbind rejected, invalid domain:", requestedDomain)
+				sendUnbindRejected(dev, requestedDomain)
+				continue
+			}
+
+			if cur, ok := registry.Global.Get(domain); !ok {
+
+				log.Println("Unbind rejected, domain not bound:", domain)
+				sendUnbindRejected(dev, domain)
+				continue
+			} else if cur != dev {
+				log.Println("Unbind rejected, device does not own active binding:", domain)
+				sendUnbindRejected(dev, domain)
+				continue
+			}
+
+			registry.Global.Unbind(domain)
+			log.Printf("Domain unbound by device: domain=%s fingerprint=%s session=%s\n", domain, dev.Fingerprint, dev.SessionID)
+
+			if err := s.Store.AddDomainHistoryForFingerprint(
+				stream.Context(),
+				dev.Fingerprint,
+				domain,
+				storage.DomainActionUnbind,
+			); err != nil {
+				log.Println("failed to write domain history (UNBIND):", err)
+				dev.SendFrame(&tunnelpb.Frame{
+					Type:    tunnelpb.FrameType_FRAME_UNBIND_REJECTED,
+					Payload: []byte(domain),
+				})
+				continue
+			}
+
+			dev.SendFrame(&tunnelpb.Frame{
+				Type:    tunnelpb.FrameType_FRAME_UNBIND_OK,
+				Payload: []byte(domain),
+			})
 		}
 	}
 }
@@ -119,6 +195,13 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 func sendBindRejected(dev *device.Device, domain string) {
 	dev.SendFrame(&tunnelpb.Frame{
 		Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
+		Payload: []byte(domain),
+	})
+}
+
+func sendUnbindRejected(dev *device.Device, domain string) {
+	dev.SendFrame(&tunnelpb.Frame{
+		Type:    tunnelpb.FrameType_FRAME_UNBIND_REJECTED,
 		Payload: []byte(domain),
 	})
 }

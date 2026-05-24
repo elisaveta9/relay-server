@@ -20,12 +20,12 @@ enum FrameType {
   FRAME_PING   = 4;
   FRAME_PONG   = 5;
 
-  FRAME_BIND_REQUEST  = 10; // device → relay
-  FRAME_BIND_OK       = 11; // relay → device
-  FRAME_BIND_REJECTED = 12; // relay → device
-  FRAME_UNBIND_REQUEST = 13; // device → relay (request to unbind)
-  FRAME_UNBIND_OK       = 14; // relay → device
-  FRAME_UNBIND_REJECTED = 15; // relay → device
+  FRAME_BIND_REQUEST  = 10; // device -> relay
+  FRAME_BIND_OK       = 11; // relay -> device
+  FRAME_BIND_REJECTED = 12; // relay -> device
+  FRAME_UNBIND_REQUEST = 13; // device -> relay
+  FRAME_UNBIND_OK       = 14; // relay -> device
+  FRAME_UNBIND_REJECTED = 15; // relay -> device
 }
 
 message Frame {

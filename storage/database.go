@@ -40,6 +40,7 @@ func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 		&Domain{},
 		&DeviceSession{},
 		&CertificateOrder{},
+		&DomainHistory{},
 	); err != nil {
 		return fmt.Errorf("auto migrate relay schema: %w", err)
 	}

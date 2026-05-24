@@ -106,3 +106,28 @@ func (o *CertificateOrder) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+type DomainHistoryAction string
+
+const (
+	DomainActionRegister DomainHistoryAction = "REGISTER"
+	DomainActionBind     DomainHistoryAction = "BIND"
+	DomainActionUnbind   DomainHistoryAction = "UNBIND"
+	DomainActionDelete   DomainHistoryAction = "DELETE"
+)
+
+type DomainHistory struct {
+	ID        uuid.UUID           `gorm:"type:uuid;primaryKey"`
+	DomainID  *uuid.UUID          `gorm:"type:uuid;index;null"`
+	DeviceID  *uuid.UUID          `gorm:"type:uuid;index;null"`
+	FQDN      string              `gorm:"size:253;not null;index"`
+	Action    DomainHistoryAction `gorm:"size:32;not null;index"`
+	CreatedAt time.Time
+}
+
+func (h *DomainHistory) BeforeCreate(tx *gorm.DB) error {
+	if h.ID == uuid.Nil {
+		h.ID = uuid.New()
+	}
+	return nil
+}

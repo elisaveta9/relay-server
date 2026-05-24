@@ -58,6 +58,16 @@ func (r *Repository) RegisterDeviceWithDomains(ctx context.Context, fingerprint 
 				return err
 			}
 			registered = append(registered, domain)
+
+			hist := DomainHistory{
+				DomainID: &domain.ID,
+				DeviceID: &device.ID,
+				FQDN:     domain.FQDN,
+				Action:   DomainActionRegister,
+			}
+			if err := tx.Create(&hist).Error; err != nil {
+				return fmt.Errorf("write domain history: %w", err)
+			}
 		}
 
 		return nil
@@ -92,6 +102,16 @@ func (r *Repository) RegisterDomainForFingerprint(ctx context.Context, fingerpri
 			return err
 		}
 		out = domain
+
+		hist := DomainHistory{
+			DomainID: &domain.ID,
+			DeviceID: &device.ID,
+			FQDN:     domain.FQDN,
+			Action:   DomainActionRegister,
+		}
+		if err := tx.Create(&hist).Error; err != nil {
+			return fmt.Errorf("write domain history: %w", err)
+		}
 		return nil
 	})
 	if err != nil {
@@ -134,20 +154,44 @@ func (r *Repository) DeleteDomain(ctx context.Context, fqdn string) (*Domain, bo
 		return nil, false, err
 	}
 
-	var domain Domain
-	err = r.db.WithContext(ctx).Where("fqdn = ?", fqdn).First(&domain).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	var out Domain
+	deleted := false
+
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var domain Domain
+		if err := tx.Where("fqdn = ?", fqdn).First(&domain).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return fmt.Errorf("find domain before delete: %w", err)
+		}
+
+		if err := tx.Delete(&domain).Error; err != nil {
+			return fmt.Errorf("delete domain: %w", err)
+		}
+
+		hist := DomainHistory{
+			DomainID: &domain.ID,
+			DeviceID: &domain.DeviceID,
+			FQDN:     domain.FQDN,
+			Action:   DomainActionDelete,
+		}
+		if err := tx.Create(&hist).Error; err != nil {
+			return fmt.Errorf("write domain history: %w", err)
+		}
+
+		out = domain
+		deleted = true
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	if !deleted {
 		return nil, false, nil
 	}
-	if err != nil {
-		return nil, false, fmt.Errorf("find domain before delete: %w", err)
-	}
-
-	if err := r.db.WithContext(ctx).Delete(&domain).Error; err != nil {
-		return nil, false, fmt.Errorf("delete domain: %w", err)
-	}
-
-	return &domain, true, nil
+	return &out, true, nil
 }
 
 func (r *Repository) DeleteOwnedDomain(ctx context.Context, fingerprint string, fqdn string) (bool, error) {
@@ -161,13 +205,42 @@ func (r *Repository) DeleteOwnedDomain(ctx context.Context, fingerprint string, 
 		return false, err
 	}
 
-	result := r.db.WithContext(ctx).
-		Where("fqdn = ? AND device_id IN (SELECT id FROM devices WHERE cert_fingerprint = ?)", fqdn, fingerprint).
-		Delete(&Domain{})
-	if result.Error != nil {
-		return false, fmt.Errorf("delete owned domain: %w", result.Error)
+	deleted := false
+
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var domain Domain
+		if err := tx.
+			Joins("JOIN devices ON devices.id = domains.device_id").
+			Where("domains.fqdn = ? AND devices.cert_fingerprint = ?", fqdn, fingerprint).
+			First(&domain).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return fmt.Errorf("find owned domain before delete: %w", err)
+		}
+
+		if err := tx.Delete(&domain).Error; err != nil {
+			return fmt.Errorf("delete owned domain: %w", err)
+		}
+
+		hist := DomainHistory{
+			DomainID: &domain.ID,
+			DeviceID: &domain.DeviceID,
+			FQDN:     domain.FQDN,
+			Action:   DomainActionDelete,
+		}
+		if err := tx.Create(&hist).Error; err != nil {
+			return fmt.Errorf("write domain history: %w", err)
+		}
+
+		deleted = true
+		return nil
+	})
+	if err != nil {
+		return false, err
 	}
-	return result.RowsAffected > 0, nil
+
+	return deleted, nil
 }
 
 func (r *Repository) AuthorizeBind(ctx context.Context, fingerprint string, fqdn string) (*Domain, error) {
@@ -206,6 +279,53 @@ func (r *Repository) AuthorizeBind(ctx context.Context, fingerprint string, fqdn
 	}
 
 	return &domain, nil
+}
+
+func (r *Repository) AddDomainHistory(ctx context.Context, domainID *uuid.UUID, deviceID *uuid.UUID, fqdn string, action DomainHistoryAction) error {
+	hist := DomainHistory{
+		DomainID: domainID,
+		DeviceID: deviceID,
+		FQDN:     fqdn,
+		Action:   action,
+	}
+	if err := r.db.WithContext(ctx).Create(&hist).Error; err != nil {
+		return fmt.Errorf("write domain history: %w", err)
+	}
+	return nil
+}
+
+// AddDomainHistoryForFingerprint writes history using device resolved from fingerprint.
+// If device can't be resolved, it falls back to writing history without DeviceID.
+func (r *Repository) AddDomainHistoryForFingerprint(
+	ctx context.Context,
+	fingerprint string,
+	domain string,
+	action DomainHistoryAction,
+) error {
+	deviceID, err := r.GetDeviceIDForFingerprint(ctx, fingerprint)
+	if err == nil {
+		return r.AddDomainHistory(ctx, nil, &deviceID, domain, action)
+	}
+
+	// Fallback: only when device can't be resolved.
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return r.AddDomainHistory(ctx, nil, nil, domain, action)
+	}
+
+	return err
+}
+
+// GetDeviceIDForFingerprint resolves a device ID from its certificate fingerprint.
+func (r *Repository) GetDeviceIDForFingerprint(ctx context.Context, fingerprint string) (uuid.UUID, error) {
+	fingerprint, err := normalizeFingerprint(fingerprint)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	var device Device
+	if err := r.db.WithContext(ctx).Where("cert_fingerprint = ?", fingerprint).First(&device).Error; err != nil {
+		return uuid.Nil, fmt.Errorf("lookup device by fingerprint: %w", err)
+	}
+	return device.ID, nil
 }
 
 func (r *Repository) OpenDeviceSession(ctx context.Context, fingerprint string) (*DeviceSession, error) {
