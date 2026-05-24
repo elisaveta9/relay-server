@@ -10,6 +10,7 @@ func Serve(addr string, repo *storage.Repository) {
 	mux := http.NewServeMux()
 
 	mux.Handle("/domains", requireAPIKey(http.HandlerFunc(domainsHandler(repo))))
+	ServeAPIv1(mux, repo)
 
 	enrollHandler, err := newEnrollmentHandler("certs/ca.crt", "certs/ca.key")
 	if err != nil {

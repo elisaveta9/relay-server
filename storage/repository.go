@@ -19,6 +19,7 @@ var (
 	ErrDomainAlreadyUsed  = errors.New("domain is already registered to another device")
 	ErrDomainNotOwned     = errors.New("domain is not registered to this device")
 	ErrDomainDisabled     = errors.New("domain is disabled")
+	ErrDomainNotFound     = errors.New("domain not found")
 
 	fingerprintPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 	labelPattern       = `[a-z0-9][a-z0-9-]{1,61}[a-z0-9]`
@@ -129,6 +130,82 @@ func (r *Repository) ListDomains(ctx context.Context) ([]Domain, error) {
 		return nil, fmt.Errorf("list domains: %w", err)
 	}
 	return domains, nil
+}
+
+func (r *Repository) GetDomainByID(ctx context.Context, id uuid.UUID) (*Domain, error) {
+	if id == uuid.Nil {
+		return nil, fmt.Errorf("get domain by id: nil id")
+	}
+
+	var domain Domain
+	if err := r.db.WithContext(ctx).First(&domain, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrDomainNotFound
+		}
+		return nil, fmt.Errorf("get domain by id: %w", err)
+	}
+	return &domain, nil
+}
+
+func (r *Repository) UpdateDomainStatus(ctx context.Context, id uuid.UUID, status DomainStatus) (*Domain, error) {
+	if id == uuid.Nil {
+		return nil, fmt.Errorf("update domain status: nil id")
+	}
+
+	switch status {
+	case DomainStatusRegistered, DomainStatusDisabled:
+	default:
+		return nil, fmt.Errorf("update domain status: unknown status")
+	}
+
+	var domain Domain
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&domain, "id = ?", id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrDomainNotFound
+			}
+			return fmt.Errorf("load domain for update: %w", err)
+		}
+
+		if domain.Status == status {
+			return nil
+		}
+
+		if err := tx.Model(&domain).Update("status", status).Error; err != nil {
+			return fmt.Errorf("update domain status: %w", err)
+		}
+
+		domain.Status = status
+
+		action := DomainActionEnable
+		if status == DomainStatusDisabled {
+			action = DomainActionDisable
+		}
+
+		hist := DomainHistory{
+			DomainID: &domain.ID,
+			DeviceID: &domain.DeviceID,
+			FQDN:     domain.FQDN,
+			Action:   action,
+		}
+		if err := tx.Create(&hist).Error; err != nil {
+			return fmt.Errorf("write domain history: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, ErrDomainNotFound) {
+			return nil, ErrDomainNotFound
+		}
+		return nil, err
+	}
+	return &domain, nil
+}
+
+func (r *Repository) DisableDomainByID(ctx context.Context, id uuid.UUID) (*Domain, error) {
+	return r.UpdateDomainStatus(ctx, id, DomainStatusDisabled)
 }
 
 func (r *Repository) ListDomainsForFingerprint(ctx context.Context, fingerprint string) ([]Domain, error) {

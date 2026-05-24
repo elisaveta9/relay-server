@@ -114,6 +114,8 @@ const (
 	DomainActionBind     DomainHistoryAction = "BIND"
 	DomainActionUnbind   DomainHistoryAction = "UNBIND"
 	DomainActionDelete   DomainHistoryAction = "DELETE"
+	DomainActionEnable   DomainHistoryAction = "ENABLE"
+	DomainActionDisable  DomainHistoryAction = "DISABLE"
 )
 
 type DomainHistory struct {
