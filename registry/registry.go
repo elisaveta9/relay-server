@@ -6,7 +6,7 @@ import (
 )
 
 type Registry struct {
-	Mu      sync.Mutex
+	Mu      sync.RWMutex
 	Domains map[string]*device.Device
 }
 
@@ -23,8 +23,8 @@ func (r *Registry) Bind(domain string, dev *device.Device) (*device.Device, bool
 }
 
 func (r *Registry) Get(domain string) (*device.Device, bool) {
-	r.Mu.Lock()
-	defer r.Mu.Unlock()
+	r.Mu.RLock()
+	defer r.Mu.RUnlock()
 	dev, ok := r.Domains[domain]
 	return dev, ok
 }

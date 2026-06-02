@@ -3,8 +3,9 @@ package grpcserver
 import (
 	"context"
 	"errors"
-	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	controlpb "relay/proto/control"
 	tunnelpb "relay/proto/tunnel"
@@ -29,14 +30,16 @@ func (s *ControlServiceImpl) RegisterDevice(
 		return nil, status.Errorf(codes.Unauthenticated, "client certificate is required: %v", err)
 	}
 
-	_, domains, err := s.Store.RegisterDeviceWithDomains(ctx, fingerprint, req.GetDomains())
-	if err != nil {
-		return nil, storageError("register device", err)
-	}
+	// TODO: добавить верификацию ACME, прежде чем разрешать устройствам запрашивать домены
+	// Разделить этот процесс на два случая: поддомены, выдаваемые relay (для которых не требуется
+	// верификация DNS-01), и домены, принадлежащие клиентам (которые должны пройти верификацию DNS-01)
+	// Запрашиваемые субдомены релея следует добавлять по отдельности, а не путем публикации
+	// wildcard-записи DNS для всей зоны android-tunnel.online
+	log.Printf("RegisterDevice domain request rejected: fingerprint=%s domains=%v", fingerprint, req.GetDomains())
 
 	return &controlpb.RegisterResponse{
-		Success: true,
-		Message: fmt.Sprintf("registered %d domain(s)", len(domains)),
+		Success: false,
+		Message: "domain registration is disabled; add domains manually in the admin panel",
 	}, nil
 }
 
@@ -81,10 +84,15 @@ func (s *ControlServiceImpl) UnregisterDomain(
 	}
 	if deleted {
 		if dev, active := registry.Global.Unbind(domain); active && dev != nil {
-			dev.SendFrame(&tunnelpb.Frame{
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+
+			if err := dev.SendFrame(notifyCtx, &tunnelpb.Frame{
 				Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
 				Payload: []byte(domain),
-			})
+			}); err != nil {
+				log.Printf("send BIND_REJECTED after unregister failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
+			}
 		}
 	}
 

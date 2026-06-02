@@ -1,9 +1,12 @@
 package admin
 
 import (
+	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	tunnelpb "relay/proto/tunnel"
 	"relay/registry"
@@ -85,10 +88,15 @@ func ownerFingerprint(r *http.Request) string {
 func notifyUnboundDevice(domain string) {
 	dev, existed := registry.Global.Unbind(domain)
 	if existed && dev != nil {
-		dev.SendFrame(&tunnelpb.Frame{
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+
+		if err := dev.SendFrame(ctx, &tunnelpb.Frame{
 			Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
 			Payload: []byte(domain),
-		})
+		}); err != nil {
+			log.Printf("send BIND_REJECTED after admin unbind failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
+		}
 	}
 }
 

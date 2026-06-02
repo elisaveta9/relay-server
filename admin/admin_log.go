@@ -2,16 +2,17 @@ package admin
 
 import (
 	"log"
-	"os"
+
+	"relay/logfile"
 )
 
 var adminLogger *log.Logger
 
 func InitLogger() {
-	f, err := os.OpenFile(
+	f, err := logfile.NewRotatingWriter(
 		"admin.log",
-		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
-		0600,
+		logfile.DefaultMaxBytes,
+		logfile.DefaultMaxBackups,
 	)
 	if err != nil {
 		log.Fatal("cannot open admin.log:", err)

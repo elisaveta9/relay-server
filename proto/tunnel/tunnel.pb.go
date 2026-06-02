@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.1
-// source: tunnel.proto
+// source: proto/tunnel.proto
 
 package tunnelpb
 
@@ -30,12 +30,13 @@ const (
 	FrameType_FRAME_CLOSE           FrameType = 3
 	FrameType_FRAME_PING            FrameType = 4
 	FrameType_FRAME_PONG            FrameType = 5
-	FrameType_FRAME_BIND_REQUEST    FrameType = 10 // device → relay
-	FrameType_FRAME_BIND_OK         FrameType = 11 // relay → device
-	FrameType_FRAME_BIND_REJECTED   FrameType = 12 // relay → device
-	FrameType_FRAME_UNBIND_REQUEST  FrameType = 13 // device → relay (request to unbind)
-	FrameType_FRAME_UNBIND_OK       FrameType = 14 // relay → device
-	FrameType_FRAME_UNBIND_REJECTED FrameType = 15 // relay → device
+	FrameType_FRAME_BIND_REQUEST    FrameType = 10 // device -> relay
+	FrameType_FRAME_BIND_OK         FrameType = 11 // relay -> device
+	FrameType_FRAME_BIND_REJECTED   FrameType = 12 // relay -> device
+	FrameType_FRAME_UNBIND_REQUEST  FrameType = 13 // device -> relay
+	FrameType_FRAME_UNBIND_OK       FrameType = 14 // relay -> device
+	FrameType_FRAME_UNBIND_REJECTED FrameType = 15 // relay -> device
+	FrameType_FRAME_BIND_REVOKED    FrameType = 16 // relay -> device, active binding was removed server-side
 )
 
 // Enum value maps for FrameType.
@@ -53,6 +54,7 @@ var (
 		13: "FRAME_UNBIND_REQUEST",
 		14: "FRAME_UNBIND_OK",
 		15: "FRAME_UNBIND_REJECTED",
+		16: "FRAME_BIND_REVOKED",
 	}
 	FrameType_value = map[string]int32{
 		"FRAME_UNSPECIFIED":     0,
@@ -67,6 +69,7 @@ var (
 		"FRAME_UNBIND_REQUEST":  13,
 		"FRAME_UNBIND_OK":       14,
 		"FRAME_UNBIND_REJECTED": 15,
+		"FRAME_BIND_REVOKED":    16,
 	}
 )
 
@@ -81,11 +84,11 @@ func (x FrameType) String() string {
 }
 
 func (FrameType) Descriptor() protoreflect.EnumDescriptor {
-	return file_tunnel_proto_enumTypes[0].Descriptor()
+	return file_proto_tunnel_proto_enumTypes[0].Descriptor()
 }
 
 func (FrameType) Type() protoreflect.EnumType {
-	return &file_tunnel_proto_enumTypes[0]
+	return &file_proto_tunnel_proto_enumTypes[0]
 }
 
 func (x FrameType) Number() protoreflect.EnumNumber {
@@ -94,7 +97,7 @@ func (x FrameType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use FrameType.Descriptor instead.
 func (FrameType) EnumDescriptor() ([]byte, []int) {
-	return file_tunnel_proto_rawDescGZIP(), []int{0}
+	return file_proto_tunnel_proto_rawDescGZIP(), []int{0}
 }
 
 type Frame struct {
@@ -108,7 +111,7 @@ type Frame struct {
 
 func (x *Frame) Reset() {
 	*x = Frame{}
-	mi := &file_tunnel_proto_msgTypes[0]
+	mi := &file_proto_tunnel_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -120,7 +123,7 @@ func (x *Frame) String() string {
 func (*Frame) ProtoMessage() {}
 
 func (x *Frame) ProtoReflect() protoreflect.Message {
-	mi := &file_tunnel_proto_msgTypes[0]
+	mi := &file_proto_tunnel_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -133,7 +136,7 @@ func (x *Frame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Frame.ProtoReflect.Descriptor instead.
 func (*Frame) Descriptor() ([]byte, []int) {
-	return file_tunnel_proto_rawDescGZIP(), []int{0}
+	return file_proto_tunnel_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Frame) GetType() FrameType {
@@ -157,15 +160,15 @@ func (x *Frame) GetPayload() []byte {
 	return nil
 }
 
-var File_tunnel_proto protoreflect.FileDescriptor
+var File_proto_tunnel_proto protoreflect.FileDescriptor
 
-const file_tunnel_proto_rawDesc = "" +
+const file_proto_tunnel_proto_rawDesc = "" +
 	"\n" +
-	"\ftunnel.proto\x12\x06tunnel\"e\n" +
+	"\x12proto/tunnel.proto\x12\x06tunnel\"e\n" +
 	"\x05Frame\x12%\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x11.tunnel.FrameTypeR\x04type\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\rR\bstreamId\x12\x18\n" +
-	"\apayload\x18\x03 \x01(\fR\apayload*\x81\x02\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload*\x99\x02\n" +
 	"\tFrameType\x12\x15\n" +
 	"\x11FRAME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -183,30 +186,31 @@ const file_tunnel_proto_rawDesc = "" +
 	"\x13FRAME_BIND_REJECTED\x10\f\x12\x18\n" +
 	"\x14FRAME_UNBIND_REQUEST\x10\r\x12\x13\n" +
 	"\x0fFRAME_UNBIND_OK\x10\x0e\x12\x19\n" +
-	"\x15FRAME_UNBIND_REJECTED\x10\x0f2;\n" +
+	"\x15FRAME_UNBIND_REJECTED\x10\x0f\x12\x16\n" +
+	"\x12FRAME_BIND_REVOKED\x10\x102;\n" +
 	"\rTunnelService\x12*\n" +
 	"\x06Tunnel\x12\r.tunnel.Frame\x1a\r.tunnel.Frame(\x010\x01BF\n" +
 	"%com.projects.httpsserverapp.tunnel.v1P\x01Z\x1brelay/proto/tunnel;tunnelpbb\x06proto3"
 
 var (
-	file_tunnel_proto_rawDescOnce sync.Once
-	file_tunnel_proto_rawDescData []byte
+	file_proto_tunnel_proto_rawDescOnce sync.Once
+	file_proto_tunnel_proto_rawDescData []byte
 )
 
-func file_tunnel_proto_rawDescGZIP() []byte {
-	file_tunnel_proto_rawDescOnce.Do(func() {
-		file_tunnel_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_tunnel_proto_rawDesc), len(file_tunnel_proto_rawDesc)))
+func file_proto_tunnel_proto_rawDescGZIP() []byte {
+	file_proto_tunnel_proto_rawDescOnce.Do(func() {
+		file_proto_tunnel_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_tunnel_proto_rawDesc), len(file_proto_tunnel_proto_rawDesc)))
 	})
-	return file_tunnel_proto_rawDescData
+	return file_proto_tunnel_proto_rawDescData
 }
 
-var file_tunnel_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tunnel_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_tunnel_proto_goTypes = []any{
+var file_proto_tunnel_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_tunnel_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_proto_tunnel_proto_goTypes = []any{
 	(FrameType)(0), // 0: tunnel.FrameType
 	(*Frame)(nil),  // 1: tunnel.Frame
 }
-var file_tunnel_proto_depIdxs = []int32{
+var file_proto_tunnel_proto_depIdxs = []int32{
 	0, // 0: tunnel.Frame.type:type_name -> tunnel.FrameType
 	1, // 1: tunnel.TunnelService.Tunnel:input_type -> tunnel.Frame
 	1, // 2: tunnel.TunnelService.Tunnel:output_type -> tunnel.Frame
@@ -217,27 +221,27 @@ var file_tunnel_proto_depIdxs = []int32{
 	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_tunnel_proto_init() }
-func file_tunnel_proto_init() {
-	if File_tunnel_proto != nil {
+func init() { file_proto_tunnel_proto_init() }
+func file_proto_tunnel_proto_init() {
+	if File_proto_tunnel_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tunnel_proto_rawDesc), len(file_tunnel_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_tunnel_proto_rawDesc), len(file_proto_tunnel_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_tunnel_proto_goTypes,
-		DependencyIndexes: file_tunnel_proto_depIdxs,
-		EnumInfos:         file_tunnel_proto_enumTypes,
-		MessageInfos:      file_tunnel_proto_msgTypes,
+		GoTypes:           file_proto_tunnel_proto_goTypes,
+		DependencyIndexes: file_proto_tunnel_proto_depIdxs,
+		EnumInfos:         file_proto_tunnel_proto_enumTypes,
+		MessageInfos:      file_proto_tunnel_proto_msgTypes,
 	}.Build()
-	File_tunnel_proto = out.File
-	file_tunnel_proto_goTypes = nil
-	file_tunnel_proto_depIdxs = nil
+	File_proto_tunnel_proto = out.File
+	file_proto_tunnel_proto_goTypes = nil
+	file_proto_tunnel_proto_depIdxs = nil
 }

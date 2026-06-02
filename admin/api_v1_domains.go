@@ -196,6 +196,9 @@ func handlePatchDomain(w http.ResponseWriter, r *http.Request, repo *storage.Rep
 		http.Error(w, `{"error":"cannot update domain"}`, http.StatusInternalServerError)
 		return
 	}
+	if updated.Status == storage.DomainStatusDisabled {
+		notifyUnboundDevice(updated.FQDN)
+	}
 
 	resp := domainCreateResponse{
 		ID:        updated.ID.String(),

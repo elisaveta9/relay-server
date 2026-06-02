@@ -16,11 +16,32 @@ import (
 )
 
 func Serve(addr string, tlsCfg *tls.Config, repo *storage.Repository) {
+	const (
+		maxConcurrentStreams = 1024
+		maxRecvMsgSize       = 8 * 1024 * 1024
+		maxSendMsgSize       = 8 * 1024 * 1024
+
+		maxConnectionAge = 0 * time.Minute
+	)
+
 	grpcServer := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
+
+		grpc.MaxConcurrentStreams(maxConcurrentStreams),
+
+		grpc.MaxRecvMsgSize(maxRecvMsgSize),
+		grpc.MaxSendMsgSize(maxSendMsgSize),
+
 		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    30 * time.Second,
-			Timeout: 10 * time.Second,
+			Time:                  30 * time.Second,
+			Timeout:               10 * time.Second,
+			MaxConnectionAge:      maxConnectionAge,
+			MaxConnectionAgeGrace: 5 * time.Second,
+		}),
+
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             10 * time.Second,
+			PermitWithoutStream: true,
 		}),
 	)
 

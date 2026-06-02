@@ -13,7 +13,7 @@ service TunnelService {
 enum FrameType {
   FRAME_UNSPECIFIED = 0;
 
-  FRAME_OPEN   = 1; // открыть TCP stream
+  FRAME_OPEN   = 1;
   FRAME_DATA   = 2;
   FRAME_CLOSE  = 3;
 
@@ -23,9 +23,10 @@ enum FrameType {
   FRAME_BIND_REQUEST  = 10; // device -> relay
   FRAME_BIND_OK       = 11; // relay -> device
   FRAME_BIND_REJECTED = 12; // relay -> device
-  FRAME_UNBIND_REQUEST = 13; // device -> relay
+  FRAME_UNBIND_REQUEST  = 13; // device -> relay
   FRAME_UNBIND_OK       = 14; // relay -> device
   FRAME_UNBIND_REJECTED = 15; // relay -> device
+  FRAME_BIND_REVOKED    = 16; // relay -> device, active binding was removed server-side
 }
 
 message Frame {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
 
@@ -22,7 +23,7 @@ var (
 	ErrDomainNotFound     = errors.New("domain not found")
 
 	fingerprintPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
-	labelPattern       = `[a-z0-9][a-z0-9-]{1,61}[a-z0-9]`
+	labelPattern       = `(?:[a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9])`
 	domainPattern      = regexp.MustCompile(`^` + labelPattern + `(\.` + labelPattern + `)*$`)
 )
 
@@ -451,28 +452,49 @@ func (r *Repository) AddDomainHistory(ctx context.Context, domainID *uuid.UUID, 
 	return nil
 }
 
-// AddDomainHistoryForFingerprint writes history using device resolved from fingerprint.
-// If device can't be resolved, it falls back to writing history without DeviceID.
+// AddDomainHistoryForFingerprint записывает историю, используя устройство, определенное по отпечатку
+// Если устройство определить не удается, выполняется запись истории без DeviceID
 func (r *Repository) AddDomainHistoryForFingerprint(
 	ctx context.Context,
 	fingerprint string,
 	domain string,
 	action DomainHistoryAction,
 ) error {
-	deviceID, err := r.GetDeviceIDForFingerprint(ctx, fingerprint)
-	if err == nil {
-		return r.AddDomainHistory(ctx, nil, &deviceID, domain, action)
+	fqdn, err := NormalizeDomain(domain)
+	if err != nil {
+		return err
 	}
 
-	// Fallback: only when device can't be resolved.
+	fingerprint, err = normalizeFingerprint(fingerprint)
+	if err != nil {
+		return err
+	}
+
+	var ownedDomain Domain
+	err = r.db.WithContext(ctx).
+		Joins("JOIN devices ON devices.id = domains.device_id").
+		Where("domains.fqdn = ? AND devices.cert_fingerprint = ?", fqdn, fingerprint).
+		First(&ownedDomain).Error
+	if err == nil {
+		return r.AddDomainHistory(ctx, &ownedDomain.ID, &ownedDomain.DeviceID, ownedDomain.FQDN, action)
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("lookup domain by fingerprint: %w", err)
+	}
+
+	deviceID, err := r.GetDeviceIDForFingerprint(ctx, fingerprint)
+	if err == nil {
+		return r.AddDomainHistory(ctx, nil, &deviceID, fqdn, action)
+	}
+
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return r.AddDomainHistory(ctx, nil, nil, domain, action)
+		return r.AddDomainHistory(ctx, nil, nil, fqdn, action)
 	}
 
 	return err
 }
 
-// GetDeviceIDForFingerprint resolves a device ID from its certificate fingerprint.
+// GetDeviceIDForFingerprint определяет идентификатор устройства по отпечатку его сертификата
 func (r *Repository) GetDeviceIDForFingerprint(ctx context.Context, fingerprint string) (uuid.UUID, error) {
 	fingerprint, err := normalizeFingerprint(fingerprint)
 	if err != nil {
@@ -593,7 +615,23 @@ func registerDomainForDevice(tx *gorm.DB, deviceID uuid.UUID, fqdn string) (Doma
 			DeviceID: deviceID,
 			Status:   DomainStatusRegistered,
 		}
+		if err := tx.SavePoint("before_domain_create").Error; err != nil {
+			return Domain{}, fmt.Errorf("create domain savepoint: %w", err)
+		}
 		if err := tx.Create(&domain).Error; err != nil {
+			if isActiveDomainUniqueViolation(err) {
+				if rollbackErr := tx.RollbackTo("before_domain_create").Error; rollbackErr != nil {
+					return Domain{}, fmt.Errorf("rollback domain create conflict: %w", rollbackErr)
+				}
+				var existing Domain
+				if loadErr := tx.Where("fqdn = ?", fqdn).First(&existing).Error; loadErr != nil {
+					return Domain{}, fmt.Errorf("load domain after unique conflict: %w", loadErr)
+				}
+				if existing.DeviceID == deviceID {
+					return existing, nil
+				}
+				return Domain{}, ErrDomainAlreadyUsed
+			}
 			return Domain{}, fmt.Errorf("create domain: %w", err)
 		}
 		return domain, nil
@@ -611,4 +649,12 @@ func registerDomainForDevice(tx *gorm.DB, deviceID uuid.UUID, fqdn string) (Doma
 		domain.Status = DomainStatusRegistered
 	}
 	return domain, nil
+}
+
+func isActiveDomainUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == "23505" && pgErr.ConstraintName == "domains_fqdn_active_unique"
 }

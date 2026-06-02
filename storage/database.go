@@ -49,6 +49,10 @@ func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 		return err
 	}
 
+	if err := ensureDomainIndexes(ctx, db); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -75,7 +79,7 @@ func ensureCheckConstraints(ctx context.Context, db *gorm.DB) error {
 			name:  "domain_fqdn_format",
 			expression: "length(fqdn) BETWEEN 3 AND 253 " +
 				"AND fqdn = lower(fqdn) " +
-				"AND fqdn ~ '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9](\\.[a-z0-9][a-z0-9-]{1,61}[a-z0-9])*$'",
+				"AND fqdn ~ '^([a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9])(\\.([a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9]))*$'",
 		},
 		{
 			table:      "domains",
@@ -98,6 +102,14 @@ func ensureCheckConstraints(ctx context.Context, db *gorm.DB) error {
 }
 
 func addCheckConstraint(ctx context.Context, db *gorm.DB, check checkConstraint) error {
+	if check.table == "domains" && check.name == "domain_fqdn_format" {
+		if err := db.WithContext(ctx).
+			Exec("ALTER TABLE domains DROP CONSTRAINT IF EXISTS domain_fqdn_format;").
+			Error; err != nil {
+			return fmt.Errorf("drop legacy check constraint %s: %w", check.name, err)
+		}
+	}
+
 	sql := fmt.Sprintf(`
 DO $$
 BEGIN
@@ -118,5 +130,36 @@ END $$;`,
 	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 		return fmt.Errorf("ensure check constraint %s: %w", check.name, err)
 	}
+	return nil
+}
+
+func ensureDomainIndexes(ctx context.Context, db *gorm.DB) error {
+	var duplicateCount int64
+	if err := db.WithContext(ctx).Raw(`
+SELECT COUNT(*)
+FROM (
+	SELECT fqdn
+	FROM domains
+	WHERE deleted_at IS NULL
+	GROUP BY fqdn
+	HAVING COUNT(*) > 1
+) dup;`).Scan(&duplicateCount).Error; err != nil {
+		return fmt.Errorf("check active domain fqdn duplicates: %w", err)
+	}
+	if duplicateCount > 0 {
+		return fmt.Errorf("cannot create active domain fqdn unique index: found %d duplicate active fqdn group(s)", duplicateCount)
+	}
+
+	if err := db.WithContext(ctx).Exec(`
+CREATE UNIQUE INDEX IF NOT EXISTS domains_fqdn_active_unique
+ON domains (fqdn)
+WHERE deleted_at IS NULL;`).Error; err != nil {
+		return fmt.Errorf("ensure active domain fqdn index: %w", err)
+	}
+
+	if err := db.WithContext(ctx).Exec(`DROP INDEX IF EXISTS idx_domains_fqdn;`).Error; err != nil {
+		return fmt.Errorf("drop legacy domain fqdn index: %w", err)
+	}
+
 	return nil
 }

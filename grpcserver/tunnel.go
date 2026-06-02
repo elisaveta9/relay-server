@@ -40,11 +40,14 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 		log.Printf("Device disconnected: fingerprint=%s session=%s\n", fingerprint, dev.SessionID)
 		dev.Close()
 
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		for _, domain := range registry.Global.UnbindDevice(dev) {
 			log.Printf("Domain unbound from device: domain=%s fingerprint=%s session=%s\n", domain, dev.Fingerprint, dev.SessionID)
 
 			if err := s.Store.AddDomainHistoryForFingerprint(
-				stream.Context(),
+				ctx,
 				dev.Fingerprint,
 				domain,
 				storage.DomainActionUnbind,
@@ -53,8 +56,6 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 			}
 		}
 
-		ctx, cancel := context.WithTimeout(stream.Context(), 5*time.Second)
-		defer cancel()
 		if err := s.Store.CloseDeviceSession(ctx, session.ID); err != nil {
 			log.Println("close device session failed:", err)
 		}
@@ -124,10 +125,12 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 					log.Println("failed to write domain history (BIND):", err)
 				}
 			}
-			dev.SendFrame(&tunnelpb.Frame{
+			if err := dev.SendFrame(stream.Context(), &tunnelpb.Frame{
 				Type:    tunnelpb.FrameType_FRAME_BIND_OK,
 				Payload: []byte(domain),
-			})
+			}); err != nil {
+				log.Printf("send BIND_OK failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
+			}
 
 		case tunnelpb.FrameType_FRAME_DATA:
 			if c, ok := dev.GetClient(frame.StreamId); ok {
@@ -140,10 +143,12 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 			dev.RemoveStream(frame.StreamId)
 
 		case tunnelpb.FrameType_FRAME_PING:
-			dev.SendFrame(&tunnelpb.Frame{
+			if err := dev.SendFrame(stream.Context(), &tunnelpb.Frame{
 				Type:    tunnelpb.FrameType_FRAME_PONG,
 				Payload: frame.Payload,
-			})
+			}); err != nil {
+				log.Printf("send PONG failed: fingerprint=%s session=%s err=%v", dev.Fingerprint, dev.SessionID, err)
+			}
 
 		case tunnelpb.FrameType_FRAME_UNBIND_REQUEST:
 			requestedDomain := strings.ToLower(strings.TrimSpace(string(frame.Payload)))
@@ -177,31 +182,45 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) e
 				storage.DomainActionUnbind,
 			); err != nil {
 				log.Println("failed to write domain history (UNBIND):", err)
-				dev.SendFrame(&tunnelpb.Frame{
+				if err := dev.SendFrame(stream.Context(), &tunnelpb.Frame{
 					Type:    tunnelpb.FrameType_FRAME_UNBIND_REJECTED,
 					Payload: []byte(domain),
-				})
+				}); err != nil {
+					log.Printf("send UNBIND_REJECTED failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
+				}
 				continue
 			}
 
-			dev.SendFrame(&tunnelpb.Frame{
+			if err := dev.SendFrame(stream.Context(), &tunnelpb.Frame{
 				Type:    tunnelpb.FrameType_FRAME_UNBIND_OK,
 				Payload: []byte(domain),
-			})
+			}); err != nil {
+				log.Printf("send UNBIND_OK failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
+			}
 		}
 	}
 }
 
 func sendBindRejected(dev *device.Device, domain string) {
-	dev.SendFrame(&tunnelpb.Frame{
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	if err := dev.SendFrame(ctx, &tunnelpb.Frame{
 		Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
 		Payload: []byte(domain),
-	})
+	}); err != nil {
+		log.Printf("send BIND_REJECTED failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
+	}
 }
 
 func sendUnbindRejected(dev *device.Device, domain string) {
-	dev.SendFrame(&tunnelpb.Frame{
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	if err := dev.SendFrame(ctx, &tunnelpb.Frame{
 		Type:    tunnelpb.FrameType_FRAME_UNBIND_REJECTED,
 		Payload: []byte(domain),
-	})
+	}); err != nil {
+		log.Printf("send UNBIND_REJECTED failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
+	}
 }

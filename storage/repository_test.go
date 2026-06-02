@@ -15,9 +15,9 @@ func TestNormalizeDomain(t *testing.T) {
 			want:  "sub.example-domain.tld",
 		},
 		{
-			name:    "rejects two character label",
-			input:   "ab.example.tld",
-			wantErr: true,
+			name:  "accepts one and two character labels",
+			input: " X.Go.Dev. ",
+			want:  "x.go.dev",
 		},
 		{
 			name:    "rejects leading hyphen",

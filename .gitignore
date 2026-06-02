@@ -1,6 +1,11 @@
-
-certs/
+.idea/
+.env
+.env.*
+!.env.example
+certs/*
+!certs/
+!certs/generate_certs.bat
+!certs/generate_certs.sh
 admin.log
-*.bat
 *.log
 report/

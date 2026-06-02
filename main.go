@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"expvar"
 	"io"
 	"log"
+	"net/http"
+	"net/http/pprof"
 	"os"
+	"time"
 
 	"relay/admin"
 	"relay/grpcserver"
 	"relay/ingress"
+	"relay/logfile"
 	"relay/storage"
 	"relay/tlsutil"
 )
@@ -47,7 +52,7 @@ func main() {
 
 	admin.InitLogger()
 
-	lf, err := os.OpenFile("server.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	lf, err := logfile.NewRotatingWriter("server.log", logfile.DefaultMaxBytes, logfile.DefaultMaxBackups)
 	if err != nil {
 		log.Printf("warning: cannot open server.log: %v", err)
 	} else {
@@ -57,6 +62,29 @@ func main() {
 
 	go admin.Serve(":8443", repo)
 	go grpcserver.Serve(":50051", tlsCfg, repo)
+
+	go func() {
+		mux := http.NewServeMux()
+
+		mux.Handle("/debug/vars", expvar.Handler())
+
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+		srv := &http.Server{
+			Addr:              "127.0.0.1:6060",
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+
+		log.Println("debug server (pprof/vars) listening on", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Println("debug server error:", err)
+		}
+	}()
 
 	ingress.Listen(":443")
 }

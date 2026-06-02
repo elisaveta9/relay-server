@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v7.34.1
-// source: tunnel.proto
+// source: proto/tunnel.proto
 
 package tunnelpb
 
@@ -111,5 +111,5 @@ var TunnelService_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "tunnel.proto",
+	Metadata: "proto/tunnel.proto",
 }

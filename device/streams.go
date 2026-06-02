@@ -1,26 +1,38 @@
 package device
 
 import (
+	"errors"
 	"net"
 )
+
+var ErrTooManyStreams = errors.New("too many active streams")
 
 func (d *Device) AllocateStreamID() uint32 {
 	d.streamsMu.Lock()
 	defer d.streamsMu.Unlock()
 
-	id := d.nextID
-	d.nextID++
-	return id
+	for {
+		id := d.nextID
+		d.nextID++
+
+		if _, exists := d.streams[id]; !exists {
+			return id
+		}
+	}
 }
 
-func (d *Device) AddStream(id uint32, conn net.Conn) chan struct{} {
+func (d *Device) AddStream(id uint32, conn net.Conn) (chan struct{}, error) {
 	d.streamsMu.Lock()
 	defer d.streamsMu.Unlock()
+
+	if d.maxStreams > 0 && len(d.streams) >= d.maxStreams {
+		return nil, ErrTooManyStreams
+	}
 
 	ch := make(chan struct{})
 	d.streams[id] = conn
 	d.streamDone[id] = ch
-	return ch
+	return ch, nil
 }
 
 func (d *Device) RemoveStream(id uint32) {
