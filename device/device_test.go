@@ -3,6 +3,7 @@ package device
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -160,7 +161,8 @@ func TestSendFramesRejectsOpenAndFirstDataTogether(t *testing.T) {
 func TestCloseClosesStreamsAndRejectsSend(t *testing.T) {
 	d := newTestDevice(4, 2, 4)
 	client, server := net.Pipe()
-	defer client.Close()
+	defer closeTestConn(t, client, "client pipe")
+	defer closeTestConn(t, server, "server pipe")
 
 	done, err := d.AddStream(1, server)
 	if err != nil {
@@ -192,14 +194,14 @@ func TestAddStreamEnforcesLimit(t *testing.T) {
 	defer d.Close()
 
 	c1, s1 := net.Pipe()
-	defer c1.Close()
-	defer s1.Close()
+	defer closeTestConn(t, c1, "client pipe 1")
+	defer closeTestConn(t, s1, "server pipe 1")
 	c2, s2 := net.Pipe()
-	defer c2.Close()
-	defer s2.Close()
+	defer closeTestConn(t, c2, "client pipe 2")
+	defer closeTestConn(t, s2, "server pipe 2")
 	c3, s3 := net.Pipe()
-	defer c3.Close()
-	defer s3.Close()
+	defer closeTestConn(t, c3, "client pipe 3")
+	defer closeTestConn(t, s3, "server pipe 3")
 
 	if _, err := d.AddStream(1, s1); err != nil {
 		t.Fatalf("AddStream first stream returned error: %v", err)
@@ -209,5 +211,15 @@ func TestAddStreamEnforcesLimit(t *testing.T) {
 	}
 	if _, err := d.AddStream(3, s3); !errors.Is(err, ErrTooManyStreams) {
 		t.Fatalf("AddStream third stream error = %v, want %v", err, ErrTooManyStreams)
+	}
+}
+
+func closeTestConn(t *testing.T, conn net.Conn, name string) {
+	t.Helper()
+
+	if err := conn.Close(); err != nil &&
+		!errors.Is(err, net.ErrClosed) &&
+		!errors.Is(err, io.ErrClosedPipe) {
+		t.Errorf("close %s: %v", name, err)
 	}
 }

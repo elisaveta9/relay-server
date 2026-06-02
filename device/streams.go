@@ -2,6 +2,7 @@ package device
 
 import (
 	"errors"
+	"log"
 	"net"
 )
 
@@ -40,7 +41,9 @@ func (d *Device) RemoveStream(id uint32) {
 	defer d.streamsMu.Unlock()
 
 	if c, ok := d.streams[id]; ok {
-		_ = c.Close()
+		if err := c.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			log.Printf("close device stream failed: fingerprint=%s session=%s stream=%d err=%v", d.Fingerprint, d.SessionID, id, err)
+		}
 		delete(d.streams, id)
 	}
 	if ch, ok := d.streamDone[id]; ok {

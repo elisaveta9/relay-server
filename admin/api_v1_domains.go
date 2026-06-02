@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -105,7 +106,7 @@ func handleListDomains(w http.ResponseWriter, r *http.Request, repo *storage.Rep
 			CreatedAt: d.CreatedAt,
 		})
 	}
-	_ = json.NewEncoder(w).Encode(out)
+	writeJSONResponse(w, out)
 }
 
 func handleGetDomainByID(w http.ResponseWriter, r *http.Request, repo *storage.Repository, idStr string) {
@@ -132,7 +133,7 @@ func handleGetDomainByID(w http.ResponseWriter, r *http.Request, repo *storage.R
 		DeviceID:  d.DeviceID.String(),
 		CreatedAt: d.CreatedAt,
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSONResponse(w, resp)
 }
 
 func handleCreateDomain(w http.ResponseWriter, r *http.Request, repo *storage.Repository) {
@@ -167,7 +168,7 @@ func handleCreateDomain(w http.ResponseWriter, r *http.Request, repo *storage.Re
 		CreatedAt: created.CreatedAt,
 	}
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSONResponse(w, resp)
 }
 
 func handlePatchDomain(w http.ResponseWriter, r *http.Request, repo *storage.Repository, idStr string) {
@@ -207,7 +208,7 @@ func handlePatchDomain(w http.ResponseWriter, r *http.Request, repo *storage.Rep
 		DeviceID:  updated.DeviceID.String(),
 		CreatedAt: updated.CreatedAt,
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSONResponse(w, resp)
 }
 
 func handleDeleteDomain(w http.ResponseWriter, r *http.Request, repo *storage.Repository, idStr string) {
@@ -236,7 +237,7 @@ func handleDeleteDomain(w http.ResponseWriter, r *http.Request, repo *storage.Re
 		DeviceID:  deleted.DeviceID.String(),
 		CreatedAt: deleted.CreatedAt,
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSONResponse(w, resp)
 }
 
 func writeStorageHTTPErrorJSON(w http.ResponseWriter, err error) {
@@ -262,5 +263,11 @@ func writeStorageHTTPErrorJSON(w http.ResponseWriter, err error) {
 	}
 
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(errorResponse{Error: msg})
+	writeJSONResponse(w, errorResponse{Error: msg})
+}
+
+func writeJSONResponse(w http.ResponseWriter, value any) {
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		log.Printf("write JSON response failed: %v", err)
+	}
 }

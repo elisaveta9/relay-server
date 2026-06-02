@@ -35,7 +35,9 @@ func NewRotatingWriter(path string, maxBytes int64, maxBackups int) (*RotatingWr
 
 	info, err := file.Stat()
 	if err != nil {
-		_ = file.Close()
+		if closeErr := file.Close(); closeErr != nil {
+			return nil, fmt.Errorf("stat log file: %w; close log file: %v", err, closeErr)
+		}
 		return nil, err
 	}
 
@@ -86,9 +88,13 @@ func (w *RotatingWriter) rotate() error {
 	}
 
 	if w.maxBackups == 0 {
-		_ = os.Remove(w.path)
+		if err := os.Remove(w.path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 	} else {
-		_ = os.Remove(backupPath(w.path, w.maxBackups))
+		if err := os.Remove(backupPath(w.path, w.maxBackups)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 		for i := w.maxBackups - 1; i >= 1; i-- {
 			oldPath := backupPath(w.path, i)
 			newPath := backupPath(w.path, i+1)

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"testing"
@@ -31,8 +32,8 @@ func captureClientHelloRecord(t *testing.T, serverName string) []byte {
 	t.Helper()
 
 	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
-	defer serverConn.Close()
+	defer closeTestConn(t, clientConn, "client pipe")
+	defer closeTestConn(t, serverConn, "server pipe")
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -59,10 +60,24 @@ func captureClientHelloRecord(t *testing.T, serverName string) []byte {
 		t.Fatalf("read TLS record payload: %v", err)
 	}
 
-	_ = clientConn.Close()
-	<-errCh
+	if err := clientConn.Close(); err != nil {
+		t.Fatalf("close client pipe: %v", err)
+	}
+	if err := <-errCh; err == nil {
+		t.Fatal("client handshake unexpectedly completed")
+	}
 
 	return record
+}
+
+func closeTestConn(t *testing.T, conn net.Conn, name string) {
+	t.Helper()
+
+	if err := conn.Close(); err != nil &&
+		!errors.Is(err, net.ErrClosed) &&
+		!errors.Is(err, io.ErrClosedPipe) {
+		t.Errorf("close %s: %v", name, err)
+	}
 }
 
 func fragmentTLSHandshakeRecord(t *testing.T, record []byte, split int) []byte {

@@ -45,7 +45,7 @@ func (s *ControlServiceImpl) RegisterDevice(
 
 func (s *ControlServiceImpl) ListDomains(
 	ctx context.Context,
-	req *controlpb.ListDomainsRequest,
+	_ *controlpb.ListDomainsRequest,
 ) (*controlpb.ListDomainsResponse, error) {
 	fingerprint, err := storage.ClientCertFingerprint(ctx)
 	if err != nil {

@@ -24,7 +24,10 @@ func domainsHandler(repo *storage.Repository) http.HandlerFunc {
 				return
 			}
 			for _, domain := range domains {
-				w.Write([]byte(domain.FQDN + "\n"))
+				if _, err := w.Write([]byte(domain.FQDN + "\n")); err != nil {
+					log.Printf("write domain list response failed: domain=%s err=%v", domain.FQDN, err)
+					return
+				}
 			}
 
 		case "POST":
@@ -49,7 +52,9 @@ func domainsHandler(repo *storage.Repository) http.HandlerFunc {
 				"ADMIN ADD domain=%s owner=%s ip=%s",
 				created.FQDN, fingerprint, r.RemoteAddr,
 			)
-			w.Write([]byte("registered\n"))
+			if _, err := w.Write([]byte("registered\n")); err != nil {
+				log.Printf("write register response failed: domain=%s err=%v", created.FQDN, err)
+			}
 
 		case "DELETE":
 			domain := strings.ToLower(r.URL.Query().Get("domain"))
@@ -68,7 +73,9 @@ func domainsHandler(repo *storage.Repository) http.HandlerFunc {
 				)
 			}
 
-			w.Write([]byte("deleted\n"))
+			if _, err := w.Write([]byte("deleted\n")); err != nil {
+				log.Printf("write delete response failed: domain=%s err=%v", domain, err)
+			}
 
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -39,7 +39,6 @@ type Device struct {
 
 	stream tunnelpb.TunnelService_TunnelServer
 
-	// Separate control/data queues to prevent DATA bursts from starving control.
 	controlCh chan *tunnelpb.Frame
 	dataCh    chan *tunnelpb.Frame
 
@@ -55,7 +54,7 @@ type Device struct {
 
 	// Пороги отбрасывания данных для кадров DATA
 	// Soft: отклонять новые кадры DATA, когда глубина очереди достигает мягкого предела
-	// Hfrd: закрывать устройство, когда нагрузка на очередь данных достигает жесткого предела
+	// Hard: закрывать устройство, когда нагрузка на очередь данных достигает жесткого предела
 	dataQueueSoftLimit int
 	dataQueueHardLimit int
 
@@ -403,8 +402,12 @@ func (d *Device) writer() {
 		// Быстрое завершение: ограниченная выгрузка
 		select {
 		case <-d.done:
-			_ = d.drain(d.controlCh, d.controlBudget, true)
-			_ = d.drain(d.dataCh, d.dataBudget, false)
+			if err := d.drain(d.controlCh, d.controlBudget, true); err != nil {
+				log.Printf("drain control queue during close failed: fingerprint=%s session=%s err=%v", d.Fingerprint, d.SessionID, err)
+			}
+			if err := d.drain(d.dataCh, d.dataBudget, false); err != nil {
+				log.Printf("drain data queue during close failed: fingerprint=%s session=%s err=%v", d.Fingerprint, d.SessionID, err)
+			}
 			d.discardQueued()
 			return
 		default:
@@ -428,7 +431,10 @@ func (d *Device) writer() {
 				d.Close()
 				return
 			}
-			_ = d.drain(d.dataCh, d.dataBudget, false)
+			if err := d.drain(d.dataCh, d.dataBudget, false); err != nil {
+				d.Close()
+				return
+			}
 
 		case f := <-d.dataCh:
 			atomic.AddInt64(&d.queuedDataFrames, -1)
@@ -446,7 +452,10 @@ func (d *Device) writer() {
 				d.Close()
 				return
 			}
-			_ = d.drain(d.controlCh, d.controlBudget, true)
+			if err := d.drain(d.controlCh, d.controlBudget, true); err != nil {
+				d.Close()
+				return
+			}
 		}
 	}
 }

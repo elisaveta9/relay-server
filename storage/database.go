@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -65,9 +66,12 @@ type checkConstraint struct {
 func ensureCheckConstraints(ctx context.Context, db *gorm.DB) error {
 	checks := []checkConstraint{
 		{
-			table:      "devices",
-			name:       "device_status_check",
-			expression: "status IN ('device_status_active','device_status_revoked')",
+			table: "devices",
+			name:  "device_status_check",
+			expression: checkInExpression("status", []string{
+				string(DeviceStatusActive),
+				string(DeviceStatusRevoked),
+			}),
 		},
 		{
 			table:      "devices",
@@ -84,12 +88,12 @@ func ensureCheckConstraints(ctx context.Context, db *gorm.DB) error {
 		{
 			table:      "domains",
 			name:       "domain_status_check",
-			expression: "status IN ('domain_status_registered','domain_status_bound','domain_status_disabled')",
+			expression: checkInExpression("status", domainStatusValues()),
 		},
 		{
 			table:      "certificate_orders",
 			name:       "certificate_order_status_check",
-			expression: "status IN ('pending_csr','pending_dns','validating','issued','failed','expired')",
+			expression: checkInExpression("status", certificateOrderStatusValues()),
 		},
 	}
 
@@ -135,6 +139,7 @@ END $$;`,
 
 func ensureDomainIndexes(ctx context.Context, db *gorm.DB) error {
 	var duplicateCount int64
+
 	if err := db.WithContext(ctx).Raw(`
 SELECT COUNT(*)
 FROM (
@@ -162,4 +167,28 @@ WHERE deleted_at IS NULL;`).Error; err != nil {
 	}
 
 	return nil
+}
+
+func checkInExpression(column string, values []string) string {
+	quoted := make([]string, 0, len(values))
+	for _, value := range values {
+		quoted = append(quoted, "'"+strings.ReplaceAll(value, "'", "''")+"'")
+	}
+	return fmt.Sprintf("%s IN (%s)", column, strings.Join(quoted, ","))
+}
+
+func domainStatusValues() []string {
+	values := make([]string, 0, len(allDomainStatuses))
+	for _, status := range allDomainStatuses {
+		values = append(values, string(status))
+	}
+	return values
+}
+
+func certificateOrderStatusValues() []string {
+	values := make([]string, 0, len(allCertificateOrderStatuses))
+	for _, status := range allCertificateOrderStatuses {
+		values = append(values, string(status))
+	}
+	return values
 }

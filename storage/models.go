@@ -22,6 +22,12 @@ const (
 	DomainStatusDisabled   DomainStatus = "domain_status_disabled"
 )
 
+var allDomainStatuses = []DomainStatus{
+	DomainStatusRegistered,
+	DomainStatusBound,
+	DomainStatusDisabled,
+}
+
 type CertificateOrderStatus string
 
 const (
@@ -32,6 +38,15 @@ const (
 	CertificateOrderStatusFailed     CertificateOrderStatus = "failed"
 	CertificateOrderStatusExpired    CertificateOrderStatus = "expired"
 )
+
+var allCertificateOrderStatuses = []CertificateOrderStatus{
+	CertificateOrderStatusPendingCSR,
+	CertificateOrderStatusPendingDNS,
+	CertificateOrderStatusValidating,
+	CertificateOrderStatusIssued,
+	CertificateOrderStatusFailed,
+	CertificateOrderStatusExpired,
+}
 
 type Device struct {
 	ID              uuid.UUID    `gorm:"type:uuid;primaryKey"`
@@ -46,7 +61,7 @@ type Device struct {
 	CertificateOrders []CertificateOrder
 }
 
-func (d *Device) BeforeCreate(tx *gorm.DB) error {
+func (d *Device) BeforeCreate(*gorm.DB) error {
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
 	}
@@ -67,7 +82,7 @@ type Domain struct {
 	CertificateOrders []CertificateOrder
 }
 
-func (d *Domain) BeforeCreate(tx *gorm.DB) error {
+func (d *Domain) BeforeCreate(*gorm.DB) error {
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
 	}
@@ -84,7 +99,7 @@ type DeviceSession struct {
 	UpdatedAt time.Time
 }
 
-func (s *DeviceSession) BeforeCreate(tx *gorm.DB) error {
+func (s *DeviceSession) BeforeCreate(*gorm.DB) error {
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
 	}
@@ -102,7 +117,7 @@ type CertificateOrder struct {
 	UpdatedAt time.Time
 }
 
-func (o *CertificateOrder) BeforeCreate(tx *gorm.DB) error {
+func (o *CertificateOrder) BeforeCreate(*gorm.DB) error {
 	if o.ID == uuid.Nil {
 		o.ID = uuid.New()
 	}
@@ -129,7 +144,7 @@ type DomainHistory struct {
 	CreatedAt time.Time
 }
 
-func (h *DomainHistory) BeforeCreate(tx *gorm.DB) error {
+func (h *DomainHistory) BeforeCreate(*gorm.DB) error {
 	if h.ID == uuid.Nil {
 		h.ID = uuid.New()
 	}

@@ -11,11 +11,11 @@ import (
 // Размер должен быть подобран с учетом доступных ресурсов RAM и CPU
 var ingressSem = func() chan struct{} {
 	// fallback
-	max := 512
+	limit := 512
 	if v := getenvInt("RELAY_INGRESS_MAX_CONNS"); v > 0 {
-		max = v
+		limit = v
 	}
-	return make(chan struct{}, max)
+	return make(chan struct{}, limit)
 }()
 
 func getenvInt(key string) int {
@@ -46,7 +46,9 @@ func Listen(addr string) {
 
 		default:
 			log.Printf("ingress rejected: remote=%s reason=max_connections limit=%d", c.RemoteAddr(), cap(ingressSem))
-			_ = c.Close()
+			if err := c.Close(); err != nil {
+				log.Printf("close rejected ingress connection failed: remote=%s err=%v", c.RemoteAddr(), err)
+			}
 			continue
 		}
 
