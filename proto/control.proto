@@ -1,40 +1,73 @@
 syntax = "proto3";
 
-package control;
+package control.v2;
 
-option go_package = "relay/proto/control;controlpb";
-option java_package = "com.projects.httpsserverapp.control.v1";
+option go_package = "relay/proto/control/v2;controlpb";
+option java_package = "com.projects.httpsserverapp.control.v2";
 option java_multiple_files = true;
 
 service ControlService {
+  rpc UpdateDeviceRegistration(UpdateDeviceRegistrationRequest)
+      returns (UpdateDeviceRegistrationResponse);
 
-  // Регистрация устройства и доменов
-  rpc RegisterDevice(RegisterRequest)
-      returns (RegisterResponse);
+  rpc GetDeviceConfig(GetDeviceConfigRequest)
+      returns (GetDeviceConfigResponse);
 
-  // Получить список доменов
   rpc ListDomains(ListDomainsRequest)
       returns (ListDomainsResponse);
 
-  // Отвязать домен
   rpc UnregisterDomain(UnregisterDomainRequest)
       returns (UnregisterDomainResponse);
+
+  rpc RegisterDomain(RegisterDomainRequest)
+      returns (DomainRegistrationResponse);
 }
 
-message RegisterRequest {
-  string device_id = 1;
-  repeated string domains = 2;
+message UpdateDeviceRegistrationRequest {
+  reserved 5;
+  reserved "device_info";
+
+  uint32 protocol_version = 1;
+  string client_version = 2;
+  repeated string supported_features = 3;
+
+  string client_reported_install_id = 4;
 }
 
-message RegisterResponse {
+message UpdateDeviceRegistrationResponse {
   bool success = 1;
   string message = 2;
+
+  uint32 accepted_protocol_version = 3;
+  repeated string server_features = 4;
+
+  repeated DomainInfo domains = 10;
+}
+
+message GetDeviceConfigRequest {}
+
+message GetDeviceConfigResponse {
+  reserved 11, 50, 51;
+  reserved "admin_endpoint", "managed_zone_id", "managed_domain_suffix";
+
+  uint32 min_supported_tunnel_protocol_version = 1;
+  uint32 max_supported_tunnel_protocol_version = 2;
+  uint32 preferred_tunnel_protocol_version = 3;
+
+  string relay_grpc_endpoint = 10;
+
+  uint32 policy_max_concurrent_streams = 20;
+  uint32 policy_max_frame_size_bytes = 21;
+  uint32 default_ping_interval_seconds = 22;
+
+  repeated string server_features = 30;
+  repeated DomainInfo domains = 40;
 }
 
 message ListDomainsRequest {}
 
 message ListDomainsResponse {
-  repeated string domains = 1;
+  repeated DomainInfo domains = 1;
 }
 
 message UnregisterDomainRequest {
@@ -43,4 +76,87 @@ message UnregisterDomainRequest {
 
 message UnregisterDomainResponse {
   bool success = 1;
+  string message = 2;
+  ControlErrorCode error_code = 3;
+}
+
+message RegisterDomainRequest {
+  string domain = 1;
+
+  // Relay-specific proof that authorizes SNI routing for this domain.
+  // It is not an ACME challenge and is not used to issue certificates.
+  DomainOwnershipProof proof = 2;
+}
+
+message DomainOwnershipProof {
+  ProofType type = 1;
+  string record_name = 2;
+  string record_value = 3;
+}
+
+message DomainRegistrationResponse {
+  bool success = 1;
+  string message = 2;
+  ControlErrorCode error_code = 3;
+
+  DomainInfo domain = 10;
+  DNSInstruction dns_instruction = 11;
+}
+
+message DNSInstruction {
+  string record_name = 1;
+  DNSRecordType record_type = 2;
+  string record_value = 3;
+  uint32 ttl_seconds = 4;
+  string purpose = 5;
+  int64 expires_at_unix_ms = 6;
+}
+
+message DomainInfo {
+  reserved 3;
+  reserved "relay_managed_zone";
+
+  string domain = 1;
+  DomainStatus status = 2;
+  bool active_binding = 4;
+  int64 created_at_unix_ms = 5;
+  int64 updated_at_unix_ms = 6;
+}
+
+enum DomainStatus {
+  DOMAIN_STATUS_UNSPECIFIED = 0;
+  DOMAIN_STATUS_PENDING_DNS = 1;
+  DOMAIN_STATUS_REGISTERED = 2;
+  DOMAIN_STATUS_DISABLED = 3;
+  DOMAIN_STATUS_REVOKED = 4;
+}
+
+enum ProofType {
+  PROOF_TYPE_UNSPECIFIED = 0;
+  PROOF_TYPE_DNS_TXT = 1;
+}
+
+enum DNSRecordType {
+  DNS_RECORD_TYPE_UNSPECIFIED = 0;
+  DNS_RECORD_TYPE_TXT = 1;
+  DNS_RECORD_TYPE_CNAME = 2;
+}
+
+enum ControlErrorCode {
+  reserved 8, 11, 12;
+  reserved "CONTROL_ERROR_CODE_SUBDOMAIN_NOT_AVAILABLE",
+           "CONTROL_ERROR_CODE_ZONE_NOT_ALLOWED",
+           "CONTROL_ERROR_CODE_INVALID_LABEL";
+
+  CONTROL_ERROR_CODE_UNSPECIFIED = 0;
+  CONTROL_ERROR_CODE_INVALID_DOMAIN = 1;
+  CONTROL_ERROR_CODE_DOMAIN_ALREADY_USED = 2;
+  CONTROL_ERROR_CODE_DOMAIN_NOT_OWNED = 3;
+  CONTROL_ERROR_CODE_DOMAIN_DISABLED = 4;
+  CONTROL_ERROR_CODE_DEVICE_REVOKED = 5;
+  CONTROL_ERROR_CODE_DNS_PROOF_REQUIRED = 6;
+  CONTROL_ERROR_CODE_DNS_PROOF_INVALID = 7;
+  CONTROL_ERROR_CODE_DOMAIN_NOT_FOUND = 9;
+  CONTROL_ERROR_CODE_RATE_LIMITED = 10;
+  CONTROL_ERROR_CODE_INTERNAL = 100;
 }

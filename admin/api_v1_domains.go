@@ -198,7 +198,7 @@ func handlePatchDomain(w http.ResponseWriter, r *http.Request, repo *storage.Rep
 		return
 	}
 	if updated.Status == storage.DomainStatusDisabled {
-		notifyUnboundDevice(updated.FQDN)
+		notifyUnboundDevice(repo, updated.FQDN, "domain disabled")
 	}
 
 	resp := domainCreateResponse{
@@ -228,7 +228,7 @@ func handleDeleteDomain(w http.ResponseWriter, r *http.Request, repo *storage.Re
 		return
 	}
 
-	notifyUnboundDevice(deleted.FQDN)
+	notifyUnboundDevice(repo, deleted.FQDN, "domain deleted")
 
 	resp := domainCreateResponse{
 		ID:        deleted.ID.String(),

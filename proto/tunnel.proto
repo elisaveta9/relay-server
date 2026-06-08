@@ -1,36 +1,220 @@
 syntax = "proto3";
 
-package tunnel;
+package tunnel.v2;
 
-option go_package = "relay/proto/tunnel;tunnelpb";
-option java_package = "com.projects.httpsserverapp.tunnel.v1";
+option go_package = "relay/proto/tunnel/v2;tunnelpb";
+option java_package = "com.projects.httpsserverapp.tunnel.v2";
 option java_multiple_files = true;
 
 service TunnelService {
   rpc Tunnel(stream Frame) returns (stream Frame);
 }
 
-enum FrameType {
-  FRAME_UNSPECIFIED = 0;
+message Frame {
+  uint64 stream_id = 1;
 
-  FRAME_OPEN   = 1;
-  FRAME_DATA   = 2;
-  FRAME_CLOSE  = 3;
+  string request_id = 2;
 
-  FRAME_PING   = 4;
-  FRAME_PONG   = 5;
+  oneof body {
+    bytes stream_data = 10;
+    StreamOpen stream_open = 11;
+    StreamClose stream_close = 12;
+    StreamReset stream_reset = 13;
+    StreamOpenResult stream_open_result = 14;
 
-  FRAME_BIND_REQUEST  = 10; // device -> relay
-  FRAME_BIND_OK       = 11; // relay -> device
-  FRAME_BIND_REJECTED = 12; // relay -> device
-  FRAME_UNBIND_REQUEST  = 13; // device -> relay
-  FRAME_UNBIND_OK       = 14; // relay -> device
-  FRAME_UNBIND_REJECTED = 15; // relay -> device
-  FRAME_BIND_REVOKED    = 16; // relay -> device, active binding was removed server-side
+    Hello hello = 20;
+    Welcome welcome = 21;
+    Ping ping = 22;
+    Pong pong = 23;
+    GoAway goaway = 24;
+    TunnelError error = 25;
+
+    BindRequest bind_request = 30;
+    BindResult bind_result = 31;
+    UnbindRequest unbind_request = 32;
+    UnbindResult unbind_result = 33;
+    DomainSync domain_sync = 34;
+    DomainRevoked domain_revoked = 35;
+  }
 }
 
-message Frame {
-  FrameType type = 1;
-  uint32 stream_id = 2;
-  bytes payload = 3;
+message Hello {
+  uint32 protocol_version = 1;
+  string client_version = 2;
+  repeated string supported_features = 3;
+
+  uint32 max_concurrent_streams = 10;
+  uint32 max_frame_size_bytes = 11;
+  uint32 preferred_ping_interval_seconds = 12;
+
+  string previous_session_id = 20;
+}
+
+message Welcome {
+  string session_id = 1;
+  int64 server_time_unix_ms = 2;
+
+  uint32 accepted_protocol_version = 3;
+  repeated string server_features = 4;
+
+  uint32 max_concurrent_streams = 10;
+  uint32 max_frame_size_bytes = 11;
+  uint32 ping_interval_seconds = 12;
+
+  repeated DomainBinding authorized_domains = 20;
+}
+
+message Ping {
+  bytes opaque = 1;
+  uint64 sent_at_unix_ms = 2;
+}
+
+message Pong {
+  bytes opaque = 1;
+  uint64 ping_sent_at_unix_ms = 2;
+  uint64 sent_at_unix_ms = 3;
+}
+
+message GoAway {
+  TunnelErrorCode code = 1;
+  string message = 2;
+
+  bool reconnect = 3;
+
+  uint32 retry_after_seconds = 4;
+
+  DisconnectReason reason = 5;
+}
+
+message TunnelError {
+  TunnelErrorCode code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+message StreamOpen {
+  string domain = 1;
+  string sni = 2;
+  string remote_addr = 3;
+  int64 opened_at_unix_ms = 4;
+}
+
+message StreamClose {
+  CloseReason reason = 1;
+  string message = 2;
+}
+
+message StreamReset {
+  TunnelErrorCode code = 1;
+  string message = 2;
+}
+
+message StreamOpenResult {
+  bool success = 1;
+  TunnelErrorCode error_code = 2;
+  string message = 3;
+}
+
+message BindRequest {
+  string domain = 1;
+  ServeMode serve_mode = 2;
+}
+
+message BindResult {
+  string domain = 1;
+  bool success = 2;
+  TunnelErrorCode error_code = 3;
+  string message = 4;
+}
+
+message UnbindRequest {
+  string domain = 1;
+}
+
+message UnbindResult {
+  string domain = 1;
+  bool success = 2;
+  TunnelErrorCode error_code = 3;
+  string message = 4;
+}
+
+message DomainSync {
+  repeated DomainBinding domains = 1;
+}
+
+message DomainBinding {
+  reserved 4;
+  reserved "relay_managed_zone";
+
+  string domain = 1;
+  DomainStatus status = 2;
+  bool bound = 3;
+}
+
+message DomainRevoked {
+  string domain = 1;
+  string reason = 2;
+  DomainRevokeReason revoke_reason = 3;
+}
+
+enum ServeMode {
+  SERVE_MODE_UNSPECIFIED = 0;
+  SERVE_MODE_HTTPS_PASSTHROUGH = 1;
+}
+
+enum DomainStatus {
+  DOMAIN_STATUS_UNSPECIFIED = 0;
+  DOMAIN_STATUS_PENDING_DNS = 1;
+  DOMAIN_STATUS_REGISTERED = 2;
+  DOMAIN_STATUS_DISABLED = 3;
+  DOMAIN_STATUS_REVOKED = 4;
+}
+
+enum CloseReason {
+  CLOSE_REASON_UNSPECIFIED = 0;
+  CLOSE_REASON_NORMAL = 1;
+  CLOSE_REASON_REMOTE_CLOSED = 2;
+  CLOSE_REASON_LOCAL_CLOSED = 3;
+  CLOSE_REASON_IDLE_TIMEOUT = 4;
+  CLOSE_REASON_POLICY_LIMIT = 5;
+  CLOSE_REASON_ERROR = 6;
+}
+
+enum DisconnectReason {
+  DISCONNECT_REASON_UNSPECIFIED = 0;
+  DISCONNECT_REASON_NETWORK_LOST = 1;
+  DISCONNECT_REASON_AUTH_EXPIRED = 2;
+  DISCONNECT_REASON_SERVER_RESTART = 3;
+  DISCONNECT_REASON_PROTOCOL_MISMATCH = 4;
+  DISCONNECT_REASON_DEVICE_REVOKED = 5;
+  DISCONNECT_REASON_SERVER_OVERLOADED = 6;
+  DISCONNECT_REASON_IDLE_TIMEOUT = 7;
+}
+
+enum DomainRevokeReason {
+  reserved 3;
+  reserved "DOMAIN_REVOKE_REASON_CERTIFICATE_EXPIRED";
+
+  DOMAIN_REVOKE_REASON_UNSPECIFIED = 0;
+  DOMAIN_REVOKE_REASON_DNS_INVALID = 1;
+  DOMAIN_REVOKE_REASON_ADMIN_ACTION = 2;
+  DOMAIN_REVOKE_REASON_DOMAIN_UNREGISTERED = 4;
+}
+
+enum TunnelErrorCode {
+  TUNNEL_ERROR_CODE_UNSPECIFIED = 0;
+  TUNNEL_ERROR_CODE_INVALID_FRAME = 1;
+  TUNNEL_ERROR_CODE_PROTOCOL_VERSION_UNSUPPORTED = 2;
+  TUNNEL_ERROR_CODE_AUTHENTICATION_REQUIRED = 3;
+  TUNNEL_ERROR_CODE_DEVICE_REVOKED = 4;
+  TUNNEL_ERROR_CODE_INVALID_DOMAIN = 5;
+  TUNNEL_ERROR_CODE_DOMAIN_NOT_REGISTERED = 6;
+  TUNNEL_ERROR_CODE_DOMAIN_NOT_OWNED = 7;
+  TUNNEL_ERROR_CODE_DOMAIN_DISABLED = 8;
+  TUNNEL_ERROR_CODE_DOMAIN_ALREADY_BOUND = 9;
+  TUNNEL_ERROR_CODE_STREAM_NOT_FOUND = 10;
+  TUNNEL_ERROR_CODE_STREAM_LIMIT_EXCEEDED = 11;
+  TUNNEL_ERROR_CODE_FRAME_TOO_LARGE = 12;
+  TUNNEL_ERROR_CODE_SERVER_UNDER_PRESSURE = 13;
+  TUNNEL_ERROR_CODE_INTERNAL = 100;
 }

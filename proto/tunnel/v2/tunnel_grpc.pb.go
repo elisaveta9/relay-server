@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TunnelService_Tunnel_FullMethodName = "/tunnel.TunnelService/Tunnel"
+	TunnelService_Tunnel_FullMethodName = "/tunnel.v2.TunnelService/Tunnel"
 )
 
 // TunnelServiceClient is the client API for TunnelService service.
@@ -100,7 +100,7 @@ type TunnelService_TunnelServer = grpc.BidiStreamingServer[Frame, Frame]
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var TunnelService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "tunnel.TunnelService",
+	ServiceName: "tunnel.v2.TunnelService",
 	HandlerType: (*TunnelServiceServer)(nil),
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{

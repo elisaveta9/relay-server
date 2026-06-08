@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	tunnelpb "relay/proto/tunnel"
+	"relay/device"
+	tunnelpb "relay/proto/tunnel/v2"
 	"relay/registry"
 	"relay/storage"
 )
@@ -66,7 +67,7 @@ func domainsHandler(repo *storage.Repository) http.HandlerFunc {
 			}
 
 			if existed && deleted != nil {
-				notifyUnboundDevice(deleted.FQDN)
+				notifyUnboundDevice(repo, deleted.FQDN, "domain deleted")
 				adminLogger.Printf(
 					"ADMIN DELETE domain=%s ip=%s",
 					deleted.FQDN, r.RemoteAddr,
@@ -92,18 +93,52 @@ func ownerFingerprint(r *http.Request) string {
 	return strings.TrimSpace(r.Header.Get("X-Device-Fingerprint"))
 }
 
-func notifyUnboundDevice(domain string) {
+func notifyUnboundDevice(repo *storage.Repository, domain string, reason string) {
 	dev, existed := registry.Global.Unbind(domain)
 	if existed && dev != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 
-		if err := dev.SendFrame(ctx, &tunnelpb.Frame{
-			Type:    tunnelpb.FrameType_FRAME_BIND_REJECTED,
-			Payload: []byte(domain),
-		}); err != nil {
-			log.Printf("send BIND_REJECTED after admin unbind failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
+		if err := dev.SendFrame(ctx, tunnelpb.NewDomainRevokedFrameWithReason(domain, reason, tunnelpb.DomainRevokeReason_DOMAIN_REVOKE_REASON_ADMIN_ACTION)); err != nil {
+			log.Printf("send domain revoked after admin unbind failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
 		}
+		sendDomainSync(ctx, repo, dev)
+	}
+}
+
+func sendDomainSync(ctx context.Context, repo *storage.Repository, dev *device.Device) {
+	domains, err := repo.ListDomainsForFingerprint(ctx, dev.Fingerprint)
+	if err != nil {
+		log.Printf("load domains for DomainSync failed: fingerprint=%s session=%s err=%v", dev.Fingerprint, dev.SessionID, err)
+		return
+	}
+	if err := dev.SendFrame(ctx, tunnelpb.NewDomainSyncFrame(domainBindings(domains, dev))); err != nil {
+		log.Printf("send DomainSync failed: fingerprint=%s session=%s err=%v", dev.Fingerprint, dev.SessionID, err)
+	}
+}
+
+func domainBindings(domains []storage.Domain, target *device.Device) []*tunnelpb.DomainBinding {
+	out := make([]*tunnelpb.DomainBinding, 0, len(domains))
+	for _, domain := range domains {
+		active, exists := registry.Global.Get(domain.FQDN)
+		bound := target != nil && exists && active == target
+		out = append(out, &tunnelpb.DomainBinding{
+			Domain: domain.FQDN,
+			Status: domainStatus(domain.Status),
+			Bound:  bound,
+		})
+	}
+	return out
+}
+
+func domainStatus(status storage.DomainStatus) tunnelpb.DomainStatus {
+	switch status {
+	case storage.DomainStatusRegistered, storage.DomainStatusBound:
+		return tunnelpb.DomainStatus_DOMAIN_STATUS_REGISTERED
+	case storage.DomainStatusDisabled:
+		return tunnelpb.DomainStatus_DOMAIN_STATUS_DISABLED
+	default:
+		return tunnelpb.DomainStatus_DOMAIN_STATUS_UNSPECIFIED
 	}
 }
 

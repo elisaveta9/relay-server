@@ -413,24 +413,23 @@ func (r *Repository) AuthorizeBind(ctx context.Context, fingerprint string, fqdn
 	}
 
 	var domain Domain
-	err = r.db.WithContext(ctx).
-		Joins("JOIN devices ON devices.id = domains.device_id").
-		Where("domains.fqdn = ? AND devices.cert_fingerprint = ?", fqdn, fingerprint).
-		First(&domain).Error
+	err = r.db.WithContext(ctx).Where("fqdn = ?", fqdn).First(&domain).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, ErrDomainNotOwned
+		return nil, ErrDomainNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("authorize bind: %w", err)
 	}
 
-	if domain.Status == DomainStatusDisabled {
-		return nil, ErrDomainDisabled
-	}
-
 	var device Device
 	if err := r.db.WithContext(ctx).First(&device, "id = ?", domain.DeviceID).Error; err != nil {
 		return nil, fmt.Errorf("load domain owner: %w", err)
+	}
+	if device.CertFingerprint != fingerprint {
+		return nil, ErrDomainNotOwned
+	}
+	if domain.Status == DomainStatusDisabled {
+		return nil, ErrDomainDisabled
 	}
 	if device.Status == DeviceStatusRevoked {
 		return nil, ErrDeviceRevoked
@@ -505,6 +504,22 @@ func (r *Repository) GetDeviceIDForFingerprint(ctx context.Context, fingerprint 
 		return uuid.Nil, fmt.Errorf("lookup device by fingerprint: %w", err)
 	}
 	return device.ID, nil
+}
+
+func (r *Repository) TouchDeviceRegistration(ctx context.Context, fingerprint string) (*Device, error) {
+	fingerprint, err := normalizeFingerprint(fingerprint)
+	if err != nil {
+		return nil, err
+	}
+
+	var device Device
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return upsertActiveDevice(tx, fingerprint, &device)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &device, nil
 }
 
 func (r *Repository) OpenDeviceSession(ctx context.Context, fingerprint string) (*DeviceSession, error) {

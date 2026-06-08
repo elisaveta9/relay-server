@@ -11,15 +11,15 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
-	controlpb "relay/proto/control"
-	tunnelpb "relay/proto/tunnel"
+	controlpb "relay/proto/control/v2"
+	tunnelpb "relay/proto/tunnel/v2"
 )
 
-func Serve(addr string, tlsCfg *tls.Config, repo *storage.Repository) {
+const grpcMaxMessageSizeBytes = 8 * 1024 * 1024
+
+func Serve(addr string, tlsCfg *tls.Config, repo *storage.Repository) error {
 	const (
 		maxConcurrentStreams = 1024
-		maxRecvMsgSize       = 8 * 1024 * 1024
-		maxSendMsgSize       = 8 * 1024 * 1024
 
 		maxConnectionAge = 0 * time.Minute
 	)
@@ -29,8 +29,8 @@ func Serve(addr string, tlsCfg *tls.Config, repo *storage.Repository) {
 
 		grpc.MaxConcurrentStreams(maxConcurrentStreams),
 
-		grpc.MaxRecvMsgSize(maxRecvMsgSize),
-		grpc.MaxSendMsgSize(maxSendMsgSize),
+		grpc.MaxRecvMsgSize(grpcMaxMessageSizeBytes),
+		grpc.MaxSendMsgSize(grpcMaxMessageSizeBytes),
 
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:                  30 * time.Second,
@@ -50,9 +50,9 @@ func Serve(addr string, tlsCfg *tls.Config, repo *storage.Repository) {
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	log.Println("gRPC listening on", addr)
-	log.Fatal(grpcServer.Serve(ln))
+	return grpcServer.Serve(ln)
 }

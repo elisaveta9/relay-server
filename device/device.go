@@ -4,22 +4,29 @@ import (
 	"context"
 	"errors"
 	"expvar"
+	"fmt"
 	"log"
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	tunnelpb "relay/proto/tunnel"
+	tunnelpb "relay/proto/tunnel/v2"
+
+	"google.golang.org/protobuf/proto"
 )
 
 var ErrDeviceClosed = context.Canceled
 
 var (
 	ErrDeviceOverloaded = errors.New("device overloaded (queue limit reached)")
+	ErrFrameTooLarge    = errors.New("frame exceeds negotiated size limit")
 )
+
+const defaultGoAwayOverloadRetryAfterSeconds = 30
 
 var (
 	expSendQueueDepth = expvar.NewInt("device_send_queue_depth")
@@ -39,12 +46,23 @@ type Device struct {
 
 	stream tunnelpb.TunnelService_TunnelServer
 
+	maxFrameSizeBytes uint32
+
 	controlCh chan *tunnelpb.Frame
 	dataCh    chan *tunnelpb.Frame
 
-	done      chan struct{}
-	closeOnce sync.Once
-	enqueueMu sync.Mutex
+	done       chan struct{}
+	writerDone chan struct{}
+	closeOnce  sync.Once
+	enqueueMu  sync.Mutex
+
+	closeFrame       *tunnelpb.Frame
+	lifecycleMu      sync.Mutex
+	firstCloseOnce   sync.Once
+	firstCloseReason string
+	closeReason      string
+	writerLastError  string
+	terminalSendErr  error
 
 	// maxStreams ограничивает количество одновременных потоков на одно устройство
 	maxStreams int
@@ -63,14 +81,27 @@ type Device struct {
 	queuedPayloadFrames int64
 
 	streamsMu  sync.Mutex
-	streams    map[uint32]net.Conn
-	streamDone map[uint32]chan struct{}
-	nextID     uint32
+	streams    map[uint64]net.Conn
+	streamDone map[uint64]chan struct{}
+	nextID     uint64
 }
 
 func NewDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, sessionID string) *Device {
+	return newDevice(stream, fingerprint, sessionID, -1, 0)
+}
+
+func NewDeviceWithMaxStreams(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, sessionID string, maxStreams int) *Device {
+	return newDevice(stream, fingerprint, sessionID, maxStreams, 0)
+}
+
+func NewDeviceWithLimits(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, sessionID string, maxStreams int, maxFrameSizeBytes uint32) *Device {
+	return newDevice(stream, fingerprint, sessionID, maxStreams, maxFrameSizeBytes)
+}
+
+func newDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, sessionID string, maxStreamsOverride int, maxFrameSizeBytesOverride uint32) *Device {
 	const (
-		defaultMaxStreams    = 128
+		defaultMaxStreams    = 24
+		defaultMaxFrameSize  = 8 * 1024 * 1024
 		defaultControlQSize  = 256
 		defaultDataQSize     = 1024
 		defaultControlBudget = 20
@@ -93,7 +124,7 @@ func NewDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, s
 	}
 
 	maxStreams := getInt("RELAY_MAX_STREAMS_PER_DEVICE", defaultMaxStreams)
-
+	maxFrameSizeBytes := getInt("RELAY_MAX_FRAME_SIZE_BYTES", defaultMaxFrameSize)
 	controlQueueSize := getInt("RELAY_CONTROL_QUEUE_SIZE", defaultControlQSize)
 	dataQueueSize := getInt("RELAY_DATA_QUEUE_SIZE", defaultDataQSize)
 
@@ -105,6 +136,15 @@ func NewDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, s
 
 	if maxStreams <= 0 {
 		maxStreams = defaultMaxStreams
+	}
+	if maxStreamsOverride >= 0 {
+		maxStreams = maxStreamsOverride
+	}
+	if maxFrameSizeBytes <= 0 {
+		maxFrameSizeBytes = defaultMaxFrameSize
+	}
+	if maxFrameSizeBytesOverride > 0 {
+		maxFrameSizeBytes = int(maxFrameSizeBytesOverride)
 	}
 	if controlQueueSize <= 0 {
 		controlQueueSize = defaultControlQSize
@@ -142,10 +182,13 @@ func NewDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, s
 		SessionID:   sessionID,
 		stream:      stream,
 
+		maxFrameSizeBytes: uint32(maxFrameSizeBytes),
+
 		controlCh: make(chan *tunnelpb.Frame, controlQueueSize),
 		dataCh:    make(chan *tunnelpb.Frame, dataQueueSize),
 
 		done:          make(chan struct{}),
+		writerDone:    make(chan struct{}),
 		maxStreams:    maxStreams,
 		controlBudget: controlBudget,
 		dataBudget:    dataBudget,
@@ -153,8 +196,8 @@ func NewDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, s
 		dataQueueSoftLimit: dataQueueSoftLimit,
 		dataQueueHardLimit: dataQueueHardLimit,
 
-		streams:    make(map[uint32]net.Conn),
-		streamDone: make(map[uint32]chan struct{}),
+		streams:    make(map[uint64]net.Conn),
+		streamDone: make(map[uint64]chan struct{}),
 		nextID:     1,
 	}
 
@@ -163,7 +206,34 @@ func NewDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, s
 }
 
 func (d *Device) Close() {
+	d.CloseWithReason("server_local_close")
+}
+
+func (d *Device) CloseWithReason(reason string) {
+	d.CloseWithFrameReason(nil, reason)
+}
+
+func (d *Device) CloseWithGoAway(code tunnelpb.TunnelErrorCode, message string, reconnect bool, retryAfterSeconds uint32) {
+	d.CloseWithGoAwayReason(code, message, reconnect, retryAfterSeconds, "server_goaway")
+}
+
+func (d *Device) CloseWithGoAwayReason(code tunnelpb.TunnelErrorCode, message string, reconnect bool, retryAfterSeconds uint32, reason string) {
+	d.CloseWithGoAwayDisconnectReason(code, message, reconnect, retryAfterSeconds, tunnelpb.DisconnectReason_DISCONNECT_REASON_UNSPECIFIED, reason)
+}
+
+func (d *Device) CloseWithGoAwayDisconnectReason(code tunnelpb.TunnelErrorCode, message string, reconnect bool, retryAfterSeconds uint32, disconnectReason tunnelpb.DisconnectReason, reason string) {
+	d.CloseWithFrameReason(tunnelpb.NewGoAwayFrameWithReason(code, message, reconnect, retryAfterSeconds, disconnectReason), reason)
+}
+
+func (d *Device) CloseWithFrame(frame *tunnelpb.Frame) {
+	d.CloseWithFrameReason(frame, "server_terminal_frame")
+}
+
+func (d *Device) CloseWithFrameReason(frame *tunnelpb.Frame, reason string) {
 	d.closeOnce.Do(func() {
+		d.MarkFirstCloseReason(reason)
+		d.setCloseReason(reason)
+		d.closeFrame = frame
 		close(d.done)
 
 		d.enqueueMu.Lock()
@@ -171,7 +241,7 @@ func (d *Device) Close() {
 
 		// Очистка всех активных потоков при отключении устройства
 		d.streamsMu.Lock()
-		ids := make([]uint32, 0, len(d.streams))
+		ids := make([]uint64, 0, len(d.streams))
 		for id := range d.streams {
 			ids = append(ids, id)
 		}
@@ -181,6 +251,67 @@ func (d *Device) Close() {
 			d.RemoveStream(id)
 		}
 	})
+}
+
+func (d *Device) CloseWithFrameReasonAndWait(ctx context.Context, frame *tunnelpb.Frame, reason string) error {
+	d.CloseWithFrameReason(frame, reason)
+
+	select {
+	case <-d.writerDone:
+		d.lifecycleMu.Lock()
+		defer d.lifecycleMu.Unlock()
+		return d.terminalSendErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (d *Device) CloseReason() string {
+	d.lifecycleMu.Lock()
+	defer d.lifecycleMu.Unlock()
+	return d.closeReason
+}
+
+func (d *Device) FirstCloseReason() string {
+	d.lifecycleMu.Lock()
+	defer d.lifecycleMu.Unlock()
+	return d.firstCloseReason
+}
+
+func (d *Device) MarkFirstCloseReason(reason string) {
+	if reason == "" {
+		reason = "unspecified"
+	}
+	d.firstCloseOnce.Do(func() {
+		d.lifecycleMu.Lock()
+		d.firstCloseReason = reason
+		d.lifecycleMu.Unlock()
+		log.Printf("tunnel first close event: fingerprint=%s session=%s reason=%s", d.Fingerprint, d.SessionID, reason)
+	})
+}
+
+func (d *Device) WriterLastError() string {
+	d.lifecycleMu.Lock()
+	defer d.lifecycleMu.Unlock()
+	return d.writerLastError
+}
+
+func (d *Device) setCloseReason(reason string) {
+	if reason == "" {
+		reason = "unspecified"
+	}
+	d.lifecycleMu.Lock()
+	defer d.lifecycleMu.Unlock()
+	d.closeReason = reason
+}
+
+func (d *Device) setWriterLastError(err error) {
+	if err == nil {
+		return
+	}
+	d.lifecycleMu.Lock()
+	defer d.lifecycleMu.Unlock()
+	d.writerLastError = err.Error()
 }
 
 // TryAdmitStream выполняет предварительную проверку на перегрузку или превышение лимита потока.
@@ -203,6 +334,14 @@ func (d *Device) TryAdmitStream() bool {
 	// Ограничение очереди: если достигнут или превышен жесткий порог перегрузки по DATA — отклонить
 	depth := atomic.LoadInt64(&d.queuedPayloadFrames)
 	if depth >= int64(d.dataQueueHardLimit) {
+		d.CloseWithGoAwayDisconnectReason(
+			tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_SERVER_UNDER_PRESSURE,
+			"server under pressure",
+			true,
+			goAwayOverloadRetryAfterSeconds(),
+			tunnelpb.DisconnectReason_DISCONNECT_REASON_SERVER_OVERLOADED,
+			"server_overload_admission_rejected",
+		)
 		return false
 	}
 
@@ -217,6 +356,12 @@ func (d *Device) SendFrames(ctx context.Context, frames ...*tunnelpb.Frame) erro
 	if len(frames) == 0 {
 		return nil
 	}
+	for _, frame := range frames {
+		if err := d.validateFrameSize(frame); err != nil {
+			expRejectedFrames.Add(1)
+			return err
+		}
+	}
 
 	select {
 	case <-d.done:
@@ -228,10 +373,11 @@ func (d *Device) SendFrames(ctx context.Context, frames ...*tunnelpb.Frame) erro
 
 	d.enqueueMu.Lock()
 	closeAfterReturn := false
+	closeFrameAfterReturn := (*tunnelpb.Frame)(nil)
 	defer func() {
 		d.enqueueMu.Unlock()
 		if closeAfterReturn {
-			d.Close()
+			d.CloseWithFrameReason(closeFrameAfterReturn, "server_overload")
 		}
 	}()
 
@@ -247,12 +393,12 @@ func (d *Device) SendFrames(ctx context.Context, frames ...*tunnelpb.Frame) erro
 	dataQueueCount := 0
 	payloadDataCount := 0
 	for _, f := range frames {
-		if isControlFrame(f.Type) {
+		if tunnelpb.IsControlFrame(f) {
 			controlCount++
 			continue
 		}
 		dataQueueCount++
-		if f.Type == tunnelpb.FrameType_FRAME_DATA {
+		if tunnelpb.IsStreamDataFrame(f) {
 			payloadDataCount++
 		}
 	}
@@ -271,6 +417,7 @@ func (d *Device) SendFrames(ctx context.Context, frames ...*tunnelpb.Frame) erro
 				d.dataQueueHardLimit,
 			)
 			closeAfterReturn = true
+			closeFrameAfterReturn = newOverloadGoAwayFrame()
 			return ErrDeviceOverloaded
 		}
 		if depth >= int64(d.dataQueueSoftLimit) || projectedDepth > int64(d.dataQueueSoftLimit) {
@@ -313,7 +460,7 @@ func (d *Device) SendFrames(ctx context.Context, frames ...*tunnelpb.Frame) erro
 	expSendQueueDepth.Add(int64(len(frames)))
 
 	for _, f := range frames {
-		if isControlFrame(f.Type) {
+		if tunnelpb.IsControlFrame(f) {
 			d.controlCh <- f
 		} else {
 			d.dataCh <- f
@@ -326,25 +473,40 @@ func (d *Device) SendFrames(ctx context.Context, frames ...*tunnelpb.Frame) erro
 	return nil
 }
 
-func isControlFrame(t tunnelpb.FrameType) bool {
-	switch t {
-	case tunnelpb.FrameType_FRAME_PING,
-		tunnelpb.FrameType_FRAME_PONG,
-		tunnelpb.FrameType_FRAME_BIND_OK,
-		tunnelpb.FrameType_FRAME_BIND_REJECTED,
-		tunnelpb.FrameType_FRAME_BIND_REVOKED,
-		tunnelpb.FrameType_FRAME_UNBIND_OK,
-		tunnelpb.FrameType_FRAME_UNBIND_REJECTED:
-		return true
-	default:
-		return false
-	}
+func newOverloadGoAwayFrame() *tunnelpb.Frame {
+	return tunnelpb.NewGoAwayFrameWithReason(
+		tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_SERVER_UNDER_PRESSURE,
+		"server under pressure",
+		true,
+		goAwayOverloadRetryAfterSeconds(),
+		tunnelpb.DisconnectReason_DISCONNECT_REASON_SERVER_OVERLOADED,
+	)
+}
+
+func goAwayOverloadRetryAfterSeconds() uint32 {
+	return uint32(envPositiveInt("RELAY_GOAWAY_OVERLOAD_RETRY_AFTER_SECONDS", defaultGoAwayOverloadRetryAfterSeconds))
 }
 
 func (d *Device) sendFrame(f *tunnelpb.Frame) error {
+	if err := d.validateFrameSize(f); err != nil {
+		d.MarkFirstCloseReason("send_loop_frame_too_large")
+		d.setWriterLastError(err)
+		return err
+	}
 	start := time.Now()
 	if err := d.stream.Send(f); err != nil {
-		log.Println("device send error:", err)
+		d.MarkFirstCloseReason(sendLoopCloseReason(err))
+		d.setWriterLastError(err)
+		log.Printf(
+			"tunnel stream send loop error: fingerprint=%s session=%s frame=%s err=%v transport_closing=%t connection_reset=%t context_canceled=%t",
+			d.Fingerprint,
+			d.SessionID,
+			frameBodyName(f),
+			err,
+			isTransportClosingError(err),
+			isConnectionResetError(err),
+			errors.Is(err, context.Canceled),
+		)
 		return err
 	}
 	latMs := time.Since(start).Milliseconds()
@@ -353,16 +515,50 @@ func (d *Device) sendFrame(f *tunnelpb.Frame) error {
 	return nil
 }
 
+func (d *Device) validateFrameSize(frame *tunnelpb.Frame) error {
+	if d.maxFrameSizeBytes == 0 {
+		return nil
+	}
+	size := proto.Size(frame)
+	if size > int(d.maxFrameSizeBytes) {
+		return fmt.Errorf("%w: size=%d limit=%d", ErrFrameTooLarge, size, d.maxFrameSizeBytes)
+	}
+	return nil
+}
+
+func sendLoopCloseReason(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case isTransportClosingError(err):
+		return "send_loop_transport_closing"
+	case strings.Contains(strings.ToLower(err.Error()), "code = unavailable"):
+		return "send_loop_unavailable"
+	case errors.Is(err, context.Canceled):
+		return "send_loop_context_canceled"
+	case isConnectionResetError(err):
+		return "send_loop_connection_reset"
+	default:
+		return "send_loop_error"
+	}
+}
+
 func (d *Device) drain(ch <-chan *tunnelpb.Frame, budget int, isControl bool) error {
 	// Non-blocking: взять до budget frames, если они доступны
 	for i := 0; i < budget; i++ {
+		select {
+		case <-d.done:
+			return nil
+		default:
+		}
+
 		select {
 		case f := <-ch:
 			if isControl {
 				atomic.AddInt64(&d.queuedControlFrames, -1)
 			} else {
 				atomic.AddInt64(&d.queuedDataFrames, -1)
-				if f.Type == tunnelpb.FrameType_FRAME_DATA {
+				if tunnelpb.IsStreamDataFrame(f) {
 					atomic.AddInt64(&d.queuedPayloadFrames, -1)
 				}
 			}
@@ -386,7 +582,7 @@ func (d *Device) discardQueued() {
 			expSendQueueDepth.Add(-1)
 		case f := <-d.dataCh:
 			atomic.AddInt64(&d.queuedDataFrames, -1)
-			if f.Type == tunnelpb.FrameType_FRAME_DATA {
+			if tunnelpb.IsStreamDataFrame(f) {
 				atomic.AddInt64(&d.queuedPayloadFrames, -1)
 			}
 			expSendQueueDepth.Add(-1)
@@ -396,17 +592,87 @@ func (d *Device) discardQueued() {
 	}
 }
 
+func envPositiveInt(key string, def int) int {
+	if value := os.Getenv(key); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed <= 0 {
+			log.Printf("invalid %s=%q, using default=%d", key, value, def)
+			return def
+		}
+		return parsed
+	}
+	return def
+}
+
+func frameBodyName(f *tunnelpb.Frame) string {
+	if f == nil {
+		return "nil"
+	}
+	switch f.GetBody().(type) {
+	case *tunnelpb.Frame_StreamData:
+		return "stream_data"
+	case *tunnelpb.Frame_StreamOpen:
+		return "stream_open"
+	case *tunnelpb.Frame_StreamClose:
+		return "stream_close"
+	case *tunnelpb.Frame_StreamReset:
+		return "stream_reset"
+	case *tunnelpb.Frame_Hello:
+		return "hello"
+	case *tunnelpb.Frame_Welcome:
+		return "welcome"
+	case *tunnelpb.Frame_Ping:
+		return "ping"
+	case *tunnelpb.Frame_Pong:
+		return "pong"
+	case *tunnelpb.Frame_Goaway:
+		return "goaway"
+	case *tunnelpb.Frame_Error:
+		return "error"
+	case *tunnelpb.Frame_BindRequest:
+		return "bind_request"
+	case *tunnelpb.Frame_BindResult:
+		return "bind_result"
+	case *tunnelpb.Frame_UnbindRequest:
+		return "unbind_request"
+	case *tunnelpb.Frame_UnbindResult:
+		return "unbind_result"
+	case *tunnelpb.Frame_DomainSync:
+		return "domain_sync"
+	case *tunnelpb.Frame_DomainRevoked:
+		return "domain_revoked"
+	default:
+		return "unknown"
+	}
+}
+
+func isTransportClosingError(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "transport is closing")
+}
+
+func isConnectionResetError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection reset") || strings.Contains(msg, "forcibly closed")
+}
+
 func (d *Device) writer() {
+	defer close(d.writerDone)
+
 	// Взвешенное планирование, сохраняющее целостность кадров (без их отбрасывания)
 	for {
-		// Быстрое завершение: ограниченная выгрузка
+		// Terminal frame must be the final frame sent for this tunnel.
 		select {
 		case <-d.done:
-			if err := d.drain(d.controlCh, d.controlBudget, true); err != nil {
-				log.Printf("drain control queue during close failed: fingerprint=%s session=%s err=%v", d.Fingerprint, d.SessionID, err)
-			}
-			if err := d.drain(d.dataCh, d.dataBudget, false); err != nil {
-				log.Printf("drain data queue during close failed: fingerprint=%s session=%s err=%v", d.Fingerprint, d.SessionID, err)
+			if d.closeFrame != nil && d.stream != nil {
+				if err := d.sendFrame(d.closeFrame); err != nil {
+					d.lifecycleMu.Lock()
+					d.terminalSendErr = err
+					d.lifecycleMu.Unlock()
+					log.Printf("send terminal close frame failed: fingerprint=%s session=%s err=%v", d.Fingerprint, d.SessionID, err)
+				}
 			}
 			d.discardQueued()
 			return
@@ -418,42 +684,41 @@ func (d *Device) writer() {
 		case <-d.done:
 			continue
 		case f := <-d.controlCh:
-			// Jnghfdbnm control frame, а затем — в пределах оставшегося бюджета
 			atomic.AddInt64(&d.queuedControlFrames, -1)
 			expSendQueueDepth.Add(-1)
 
 			if err := d.sendFrame(f); err != nil {
-				d.Close()
+				d.CloseWithReason("server_send_loop_error")
 				return
 			}
 
 			if err := d.drain(d.controlCh, d.controlBudget-1, true); err != nil {
-				d.Close()
+				d.CloseWithReason("server_send_loop_error")
 				return
 			}
 			if err := d.drain(d.dataCh, d.dataBudget, false); err != nil {
-				d.Close()
+				d.CloseWithReason("server_send_loop_error")
 				return
 			}
 
 		case f := <-d.dataCh:
 			atomic.AddInt64(&d.queuedDataFrames, -1)
-			if f.Type == tunnelpb.FrameType_FRAME_DATA {
+			if tunnelpb.IsStreamDataFrame(f) {
 				atomic.AddInt64(&d.queuedPayloadFrames, -1)
 			}
 			expSendQueueDepth.Add(-1)
 
 			if err := d.sendFrame(f); err != nil {
-				d.Close()
+				d.CloseWithReason("server_send_loop_error")
 				return
 			}
 
 			if err := d.drain(d.dataCh, d.dataBudget-1, false); err != nil {
-				d.Close()
+				d.CloseWithReason("server_send_loop_error")
 				return
 			}
 			if err := d.drain(d.controlCh, d.controlBudget, true); err != nil {
-				d.Close()
+				d.CloseWithReason("server_send_loop_error")
 				return
 			}
 		}

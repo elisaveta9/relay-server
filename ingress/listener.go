@@ -27,10 +27,10 @@ func getenvInt(key string) int {
 	return 0
 }
 
-func Listen(addr string) {
+func Listen(addr string) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	log.Println("HTTPS passthrough listening on", addr)
 

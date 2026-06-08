@@ -3,9 +3,9 @@ set -eu
 
 cd "$(dirname "$0")"
 
-if [ ! -f ".env" ]; then
-    echo "[ERROR] .env not found."
-    echo "Copy .env.example to .env and adjust local values."
+if [ ! -f "relay.env" ]; then
+    echo "[ERROR] relay.env not found."
+    echo "Copy .env.example to relay.env and adjust local values."
     exit 1
 fi
 
@@ -17,7 +17,7 @@ while IFS='=' read -r key value; do
         ""|\#*) continue ;;
     esac
     export "$key=$value"
-done < ".env"
+done < "relay.env"
 
 if [ -z "${DATABASE_URL:-}${RELAY_DATABASE_DSN:-}" ]; then
     echo "[ERROR] DATABASE_URL or RELAY_DATABASE_DSN is not set"

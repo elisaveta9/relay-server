@@ -3,13 +3,15 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
-if not exist ".env" (
-    echo [ERROR] .env not found.
-    echo Copy .env.example to .env and adjust local values.
+set "ENV_FILE=relay.env"
+
+if not exist "%ENV_FILE%" (
+    echo [ERROR] %ENV_FILE% not found.
+    echo Create %ENV_FILE% and adjust local values.
     exit /b 1
 )
 
-for /f "usebackq eol=# tokens=1,* delims==" %%A in (".env") do (
+for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%ENV_FILE%") do (
     if not "%%A"=="" set "%%A=%%B"
 )
 

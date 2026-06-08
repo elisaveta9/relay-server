@@ -8,7 +8,7 @@ import (
 
 var ErrTooManyStreams = errors.New("too many active streams")
 
-func (d *Device) AllocateStreamID() uint32 {
+func (d *Device) AllocateStreamID() uint64 {
 	d.streamsMu.Lock()
 	defer d.streamsMu.Unlock()
 
@@ -22,11 +22,11 @@ func (d *Device) AllocateStreamID() uint32 {
 	}
 }
 
-func (d *Device) AddStream(id uint32, conn net.Conn) (chan struct{}, error) {
+func (d *Device) AddStream(id uint64, conn net.Conn) (chan struct{}, error) {
 	d.streamsMu.Lock()
 	defer d.streamsMu.Unlock()
 
-	if d.maxStreams > 0 && len(d.streams) >= d.maxStreams {
+	if d.maxStreams >= 0 && len(d.streams) >= d.maxStreams {
 		return nil, ErrTooManyStreams
 	}
 
@@ -36,7 +36,7 @@ func (d *Device) AddStream(id uint32, conn net.Conn) (chan struct{}, error) {
 	return ch, nil
 }
 
-func (d *Device) RemoveStream(id uint32) {
+func (d *Device) RemoveStream(id uint64) {
 	d.streamsMu.Lock()
 	defer d.streamsMu.Unlock()
 
@@ -52,11 +52,15 @@ func (d *Device) RemoveStream(id uint32) {
 	}
 }
 
-func (d *Device) GetClient(id uint32) (net.Conn, bool) {
+func (d *Device) GetClient(id uint64) (net.Conn, bool) {
 	d.streamsMu.Lock()
 	defer d.streamsMu.Unlock()
 	c, ok := d.streams[id]
 	return c, ok
+}
+
+func (d *Device) MaxFrameSizeBytes() uint32 {
+	return d.maxFrameSizeBytes
 }
 
 func (d *Device) Done() <-chan struct{} {

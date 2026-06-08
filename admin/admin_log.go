@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"fmt"
 	"log"
 
 	"relay/logfile"
@@ -8,15 +9,16 @@ import (
 
 var adminLogger *log.Logger
 
-func InitLogger() {
+func InitLogger() error {
 	f, err := logfile.NewRotatingWriter(
 		"admin.log",
 		logfile.DefaultMaxBytes,
 		logfile.DefaultMaxBackups,
 	)
 	if err != nil {
-		log.Fatal("cannot open admin.log:", err)
+		return fmt.Errorf("cannot open admin.log: %w", err)
 	}
 
 	adminLogger = log.New(f, "", log.LstdFlags|log.LUTC)
+	return nil
 }

@@ -1,6 +1,5 @@
 .idea/
-.env
-.env.*
+relay.env
 !.env.example
 certs/*
 !certs/

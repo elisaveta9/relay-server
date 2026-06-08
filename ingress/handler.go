@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -13,7 +14,10 @@ import (
 	"relay/registry"
 	"relay/util"
 
-	tunnelpb "relay/proto/tunnel"
+	tunnelpb "relay/proto/tunnel/v2"
+
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 )
 
 func handleClientTCP(conn net.Conn) {
@@ -81,10 +85,7 @@ func handleClientTCP(conn net.Conn) {
 		ctxClose, cancelClose := context.WithTimeout(context.Background(), sendTimeout)
 		defer cancelClose()
 
-		if err := dev.SendFrame(ctxClose, &tunnelpb.Frame{
-			Type:     tunnelpb.FrameType_FRAME_CLOSE,
-			StreamId: streamID,
-		}); err != nil {
+		if err := dev.SendFrame(ctxClose, tunnelpb.NewStreamCloseFrame(streamID, tunnelpb.CloseReason_CLOSE_REASON_LOCAL_CLOSED, "")); err != nil {
 			log.Printf("send close frame failed: remote=%s sni=%q stream=%d err=%v", remote, sni, streamID, err)
 		}
 	}
@@ -98,18 +99,7 @@ func handleClientTCP(conn net.Conn) {
 	)
 
 	ctxOpen, cancelOpen := context.WithTimeout(context.Background(), sendTimeout)
-	err = dev.SendFrames(ctxOpen,
-		&tunnelpb.Frame{
-			Type:     tunnelpb.FrameType_FRAME_OPEN,
-			StreamId: streamID,
-			Payload:  []byte(sni),
-		},
-		&tunnelpb.Frame{
-			Type:     tunnelpb.FrameType_FRAME_DATA,
-			StreamId: streamID,
-			Payload:  append([]byte(nil), hello...),
-		},
-	)
+	err = dev.SendFrame(ctxOpen, tunnelpb.NewStreamOpenFrame(streamID, sni, remote))
 	cancelOpen()
 	if err != nil {
 		log.Printf(
@@ -122,6 +112,25 @@ func handleClientTCP(conn net.Conn) {
 			err,
 		)
 		writeHTTPReject(conn, remote, writeTimeout, "open_stream_send_failed", []byte("HTTP/1.1 503 Busy\r\nConnection: close\r\n\r\n"))
+		removeStream()
+		return
+	}
+
+	ctxHello, cancelHello := context.WithTimeout(context.Background(), sendTimeout)
+	err = sendStreamDataChunks(ctxHello, dev, streamID, hello, dev.MaxFrameSizeBytes())
+	cancelHello()
+	if err != nil {
+		log.Printf(
+			"ingress rejected: remote=%s sni=%q reason=client_hello_send_failed fingerprint=%s session=%s stream=%d max_frame_size_bytes=%d err=%v",
+			remote,
+			sni,
+			dev.Fingerprint,
+			dev.SessionID,
+			streamID,
+			dev.MaxFrameSizeBytes(),
+			err,
+		)
+		sendClose()
 		removeStream()
 		return
 	}
@@ -158,14 +167,8 @@ func handleClientTCP(conn net.Conn) {
 				return
 			}
 
-			payload := append([]byte(nil), buf[:n]...)
-
 			ctxData, cancelData := context.WithTimeout(context.Background(), sendTimeout)
-			err := dev.SendFrame(ctxData, &tunnelpb.Frame{
-				Type:     tunnelpb.FrameType_FRAME_DATA,
-				StreamId: streamID,
-				Payload:  payload,
-			})
+			err := sendStreamDataChunks(ctxData, dev, streamID, buf[:n], dev.MaxFrameSizeBytes())
 			cancelData()
 
 			if err != nil {
@@ -182,6 +185,63 @@ func handleClientTCP(conn net.Conn) {
 	}
 
 	removeStream()
+}
+
+type streamDataSender interface {
+	SendFrame(context.Context, *tunnelpb.Frame) error
+}
+
+func sendStreamDataChunks(ctx context.Context, sender streamDataSender, streamID uint64, payload []byte, maxFrameSizeBytes uint32) error {
+	if len(payload) == 0 {
+		return nil
+	}
+
+	maxPayloadSize := len(payload)
+	if maxFrameSizeBytes > 0 {
+		maxPayloadSize = maxStreamDataPayloadSize(streamID, maxFrameSizeBytes)
+		if maxPayloadSize <= 0 {
+			return fmt.Errorf("max frame size %d is too small for stream data", maxFrameSizeBytes)
+		}
+	}
+
+	for len(payload) > 0 {
+		chunkSize := maxPayloadSize
+		if chunkSize > len(payload) {
+			chunkSize = len(payload)
+		}
+
+		chunk := append([]byte(nil), payload[:chunkSize]...)
+		frame := tunnelpb.NewStreamDataFrame(streamID, chunk)
+		if maxFrameSizeBytes > 0 && proto.Size(frame) > int(maxFrameSizeBytes) {
+			return fmt.Errorf("stream data frame exceeds max size %d", maxFrameSizeBytes)
+		}
+		if err := sender.SendFrame(ctx, frame); err != nil {
+			return err
+		}
+		payload = payload[chunkSize:]
+	}
+
+	return nil
+}
+
+func maxStreamDataPayloadSize(streamID uint64, maxFrameSizeBytes uint32) int {
+	limit := int(maxFrameSizeBytes)
+	if limit <= 0 {
+		return 0
+	}
+
+	baseSize := proto.Size(&tunnelpb.Frame{StreamId: streamID})
+	low, high := 0, limit
+	for low < high {
+		mid := low + (high-low+1)/2
+		size := baseSize + protowire.SizeTag(10) + protowire.SizeBytes(mid)
+		if size <= limit {
+			low = mid
+		} else {
+			high = mid - 1
+		}
+	}
+	return low
 }
 
 func writeHTTPReject(conn net.Conn, remote string, timeout time.Duration, reason string, body []byte) {
