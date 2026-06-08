@@ -35,17 +35,25 @@ if ! command -v go >/dev/null 2>&1; then
 fi
 
 for file in \
-    certs/ca.crt \
-    certs/server.crt \
-    certs/server.key \
-    certs/admin.crt \
-    certs/admin.key
+    "${RELAY_DEVICE_CA_CERT_FILE:-certs/ca.crt}" \
+    "${RELAY_GRPC_CERT_FILE:-certs/server.crt}" \
+    "${RELAY_GRPC_KEY_FILE:-certs/server.key}" \
+    "${RELAY_ADMIN_CERT_FILE:-certs/admin.crt}" \
+    "${RELAY_ADMIN_KEY_FILE:-certs/admin.key}"
 do
     if [ ! -f "$file" ]; then
         echo "[ERROR] $file not found. Run certs/generate_certs.sh first."
         exit 1
     fi
 done
+
+if [ -n "${RELAY_ENROLLMENT_TOKEN:-}" ]; then
+    file="${RELAY_DEVICE_CA_KEY_FILE:-certs/ca.key}"
+    if [ ! -f "$file" ]; then
+        echo "[ERROR] $file not found. It is required while device enrollment is enabled."
+        exit 1
+    fi
+fi
 
 echo "[INFO] Starting relay server..."
 exec go run .

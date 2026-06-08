@@ -1,10 +1,13 @@
 package ingress
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net"
 	"os"
 	"strconv"
+	"sync"
 )
 
 // ingressSem ограничивает количество одновременно обрабатываемых TCP-соединений
@@ -27,16 +30,35 @@ func getenvInt(key string) int {
 	return 0
 }
 
-func Listen(addr string) error {
+type Server struct {
+	listener   net.Listener
+	wg         sync.WaitGroup
+	closeOnce  sync.Once
+	closeErr   error
+	acceptDone chan struct{}
+}
+
+func NewServer(addr string) (*Server, error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	log.Println("HTTPS passthrough listening on", addr)
+	return &Server{
+		listener:   ln,
+		acceptDone: make(chan struct{}),
+	}, nil
+}
+
+func (s *Server) Serve() error {
+	defer close(s.acceptDone)
+	log.Println("HTTPS passthrough listening on", s.listener.Addr())
 
 	for {
-		c, err := ln.Accept()
+		c, err := s.listener.Accept()
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return nil
+			}
 			log.Println("accept error:", err)
 			continue
 		}
@@ -52,9 +74,40 @@ func Listen(addr string) error {
 			continue
 		}
 
+		s.wg.Add(1)
 		go func(conn net.Conn) {
+			defer s.wg.Done()
 			defer func() { <-ingressSem }()
 			handleClientTCP(conn)
 		}(c)
 	}
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	if err := s.StopAccepting(); err != nil {
+		return err
+	}
+
+	done := make(chan struct{})
+	go func() {
+		<-s.acceptDone
+		s.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Server) StopAccepting() error {
+	s.closeOnce.Do(func() {
+		if err := s.listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			s.closeErr = err
+		}
+	})
+	return s.closeErr
 }

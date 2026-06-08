@@ -183,6 +183,39 @@ endpoint'ов. Сертификаты Let's Encrypt могут заменить 
 использовать публичный server certificate, но `certs/ca.crt` все равно нужен
 для проверки клиентских сертификатов устройств при `TLS_CLIENT_AUTH=require`.
 
+Пути задаются через переменные:
+
+- `RELAY_GRPC_CERT_FILE` и `RELAY_GRPC_KEY_FILE`;
+- `RELAY_ADMIN_CERT_FILE` и `RELAY_ADMIN_KEY_FILE`;
+- `RELAY_DEVICE_CA_CERT_FILE` для проверки клиентских сертификатов;
+- `RELAY_DEVICE_CA_KEY_FILE` для endpoint регистрации устройств.
+
+Пример для VPS, где gRPC и admin используют один публичный hostname:
+
+```text
+RELAY_GRPC_CERT_FILE=/etc/letsencrypt/live/relay.example.com/fullchain.pem
+RELAY_GRPC_KEY_FILE=/etc/letsencrypt/live/relay.example.com/privkey.pem
+RELAY_ADMIN_CERT_FILE=/etc/letsencrypt/live/relay.example.com/fullchain.pem
+RELAY_ADMIN_KEY_FILE=/etc/letsencrypt/live/relay.example.com/privkey.pem
+RELAY_DEVICE_CA_CERT_FILE=/etc/relay/pki/device-ca.crt
+RELAY_DEVICE_CA_KEY_FILE=/etc/relay/pki/device-ca.key
+```
+
+Let's Encrypt не заменяет device CA: публичный сертификат защищает серверные
+endpoint, а отдельный CA выпускает и проверяет клиентские сертификаты
+устройств. Закрытый ключ device CA должен быть доступен только пользователю
+relay.
+
+При `SIGTERM` сервер прекращает принимать новые ingress-соединения, отправляет
+подключенным устройствам `GoAway`, по умолчанию ждёт 5 секунд и затем корректно
+останавливает gRPC, admin, ingress и debug-серверы. Параметры:
+
+- `RELAY_GOAWAY_PLANNED_RETRY_AFTER_SECONDS` - когда устройству пробовать
+  переподключиться;
+- `RELAY_GOAWAY_SHUTDOWN_DRAIN_MS` - время доставки `GoAway` и завершения
+  текущего обмена;
+- `RELAY_SHUTDOWN_TIMEOUT_SECONDS` - общий предел финального завершения.
+
 ## Состояние доменов и история
 
 Таблица `domains` хранит текущего владельца домена и операционный статус.

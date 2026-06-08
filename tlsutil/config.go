@@ -3,25 +3,27 @@ package tlsutil
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
+	"fmt"
 	"log"
 	"os"
 	"strings"
 )
 
-func GRPCTLSConfig() (*tls.Config, error) {
-	cert, err := tls.LoadX509KeyPair("certs/server.crt", "certs/server.key")
+func GRPCTLSConfig(certFile string, keyFile string, clientCAFile string) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load gRPC certificate: %w", err)
 	}
 
-	caPEM, err := ioutil.ReadFile("certs/ca.crt")
+	caPEM, err := os.ReadFile(clientCAFile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read device CA certificate: %w", err)
 	}
 
 	caPool := x509.NewCertPool()
-	caPool.AppendCertsFromPEM(caPEM)
+	if !caPool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("device CA certificate contains no valid certificates")
+	}
 
 	clientAuth := tls.RequireAndVerifyClientCert
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("TLS_CLIENT_AUTH"))) {

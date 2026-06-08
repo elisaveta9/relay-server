@@ -1,20 +1,37 @@
 package admin
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"relay/storage"
+	"time"
 )
 
-func Serve(addr string, repo *storage.Repository) {
+type Server struct {
+	httpServer *http.Server
+	certFile   string
+	keyFile    string
+}
+
+type ServerConfig struct {
+	Addr         string
+	CertFile     string
+	KeyFile      string
+	DeviceCAFile string
+	DeviceCAKey  string
+}
+
+func NewServer(config ServerConfig, repo *storage.Repository) (*Server, error) {
 	mux := http.NewServeMux()
 
 	mux.Handle("/domains", requireAPIKey(http.HandlerFunc(domainsHandler(repo))))
 	ServeAPIv1(mux, repo)
 
-	enrollHandler, err := newEnrollmentHandler("certs/ca.crt", "certs/ca.key")
+	enrollHandler, err := newEnrollmentHandler(config.DeviceCAFile, config.DeviceCAKey)
 	if err != nil {
-		log.Fatal("cannot initialize enrollment handler:", err)
+		return nil, fmt.Errorf("cannot initialize enrollment handler: %w", err)
 	}
 	mux.Handle("/enroll", enrollHandler)
 
@@ -22,11 +39,25 @@ func Serve(addr string, repo *storage.Repository) {
 		http.ServeFile(w, r, "admin.html")
 	})
 
-	log.Println("Admin API listening on", addr)
-	log.Fatal(http.ListenAndServeTLS(
-		addr,
-		"certs/admin.crt",
-		"certs/admin.key",
-		mux,
-	))
+	return &Server{
+		httpServer: &http.Server{
+			Addr:              config.Addr,
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       60 * time.Second,
+		},
+		certFile: config.CertFile,
+		keyFile:  config.KeyFile,
+	}, nil
+}
+
+func (s *Server) Serve() error {
+	log.Println("Admin API listening on", s.httpServer.Addr)
+	return s.httpServer.ListenAndServeTLS(s.certFile, s.keyFile)
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.httpServer.Shutdown(ctx)
 }

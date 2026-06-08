@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,7 +27,8 @@ import (
 
 const (
 	defaultGoAwayPlannedRetryAfterSeconds = 5
-	defaultGoAwayShutdownDrainMs          = 500
+	defaultGoAwayShutdownDrainMs          = 5000
+	defaultShutdownTimeoutSeconds         = 15
 )
 
 func main() {
@@ -56,7 +58,11 @@ func main() {
 	}
 	repo := storage.NewRepository(db)
 
-	tlsCfg, err := tlsutil.GRPCTLSConfig()
+	tlsCfg, err := tlsutil.GRPCTLSConfig(
+		envFile("RELAY_GRPC_CERT_FILE", "certs/server.crt"),
+		envFile("RELAY_GRPC_KEY_FILE", "certs/server.key"),
+		envFile("RELAY_DEVICE_CA_CERT_FILE", "certs/ca.crt"),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -75,37 +81,41 @@ func main() {
 
 	serverErrCh := make(chan error, 4)
 
+	adminServer, err := admin.NewServer(admin.ServerConfig{
+		Addr:         envFile("RELAY_ADMIN_ADDR", ":8443"),
+		CertFile:     envFile("RELAY_ADMIN_CERT_FILE", "certs/admin.crt"),
+		KeyFile:      envFile("RELAY_ADMIN_KEY_FILE", "certs/admin.key"),
+		DeviceCAFile: envFile("RELAY_DEVICE_CA_CERT_FILE", "certs/ca.crt"),
+		DeviceCAKey:  envFile("RELAY_DEVICE_CA_KEY_FILE", "certs/ca.key"),
+	}, repo)
+	if err != nil {
+		log.Fatal(err)
+	}
+	grpcServer, err := grpcserver.NewServer(envFile("RELAY_GRPC_ADDR", ":50051"), tlsCfg, repo)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ingressServer, err := ingress.NewServer(envFile("RELAY_INGRESS_ADDR", ":443"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	debugServer := newDebugServer()
+
 	go func() {
-		if err := admin.Serve(":8443", repo); err != nil && err != http.ErrServerClosed {
+		if err := adminServer.Serve(); err != nil && err != http.ErrServerClosed {
 			serverErrCh <- fmt.Errorf("admin server: %w", err)
 		}
 	}()
 	go func() {
-		if err := grpcserver.Serve(":50051", tlsCfg, repo); err != nil {
+		if err := grpcServer.Serve(); err != nil {
 			serverErrCh <- fmt.Errorf("grpc server: %w", err)
 		}
 	}()
 
 	go func() {
-		mux := http.NewServeMux()
-
-		mux.Handle("/debug/vars", expvar.Handler())
-
-		mux.HandleFunc("/debug/pprof/", pprof.Index)
-		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-
-		srv := &http.Server{
-			Addr:              "127.0.0.1:6060",
-			Handler:           mux,
-			ReadHeaderTimeout: 5 * time.Second,
-		}
-
-		log.Println("debug server (pprof/vars) listening on", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Println("debug server error:", err)
+		log.Println("debug server (pprof/vars) listening on", debugServer.Addr)
+		if err := debugServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErrCh <- fmt.Errorf("debug server: %w", err)
 		}
 	}()
 
@@ -113,21 +123,76 @@ func main() {
 	defer stopSignals()
 
 	go func() {
-		if err := ingress.Listen(":443"); err != nil {
+		if err := ingressServer.Serve(); err != nil {
 			serverErrCh <- fmt.Errorf("ingress listener: %w", err)
 		}
 	}()
 
+	var shutdownReason string
 	select {
 	case <-shutdownCtx.Done():
+		shutdownReason = shutdownCtx.Err().Error()
 		stopSignals()
 	case err := <-serverErrCh:
-		log.Fatal(err)
+		shutdownReason = err.Error()
+		log.Printf("server shutdown requested: %v", err)
 	}
 
+	if err := ingressServer.StopAccepting(); err != nil {
+		log.Printf("stop accepting ingress connections failed: %v", err)
+	}
 	notified := notifyPlannedShutdown()
-	log.Printf("planned shutdown: sent GoAway to %d active device(s)", notified)
+	log.Printf("shutdown started: reason=%s sent GoAway to %d active device(s)", shutdownReason, notified)
 	time.Sleep(plannedShutdownDrainDuration())
+
+	shutdownCtx, cancelShutdown := context.WithTimeout(
+		context.Background(),
+		time.Duration(envPositiveInt("RELAY_SHUTDOWN_TIMEOUT_SECONDS", defaultShutdownTimeoutSeconds))*time.Second,
+	)
+	defer cancelShutdown()
+	shutdownServers(shutdownCtx, adminServer, grpcServer, ingressServer, debugServer)
+}
+
+func newDebugServer() *http.Server {
+	mux := http.NewServeMux()
+	mux.Handle("/debug/vars", expvar.Handler())
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	return &http.Server{
+		Addr:              envFile("RELAY_DEBUG_ADDR", "127.0.0.1:6060"),
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+}
+
+func shutdownServers(
+	ctx context.Context,
+	adminServer *admin.Server,
+	grpcServer *grpcserver.Server,
+	ingressServer *ingress.Server,
+	debugServer *http.Server,
+) {
+	var wg sync.WaitGroup
+	shutdown := func(name string, fn func(context.Context) error) {
+		defer wg.Done()
+		if err := fn(ctx); err != nil {
+			log.Printf("%s shutdown failed: %v", name, err)
+		}
+	}
+
+	wg.Add(4)
+	go shutdown("admin server", adminServer.Shutdown)
+	go shutdown("gRPC server", grpcServer.Shutdown)
+	go shutdown("ingress server", ingressServer.Shutdown)
+	go shutdown("debug server", debugServer.Shutdown)
+	wg.Wait()
 }
 
 func notifyPlannedShutdown() int {
@@ -158,6 +223,13 @@ func envPositiveInt(key string, def int) int {
 			return def
 		}
 		return parsed
+	}
+	return def
+}
+
+func envFile(key string, def string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
 	return def
 }

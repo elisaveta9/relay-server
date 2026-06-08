@@ -39,6 +39,7 @@ func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 	if err := db.WithContext(ctx).AutoMigrate(
 		&Device{},
 		&Domain{},
+		&DomainOwnershipChallenge{},
 		&DeviceSession{},
 		&CertificateOrder{},
 		&DomainHistory{},

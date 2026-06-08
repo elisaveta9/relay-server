@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"regexp"
@@ -11,16 +13,24 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
-	ErrFingerprintInvalid = errors.New("invalid certificate fingerprint")
-	ErrDeviceRevoked      = errors.New("device is revoked")
-	ErrDomainInvalid      = errors.New("invalid domain")
-	ErrDomainAlreadyUsed  = errors.New("domain is already registered to another device")
-	ErrDomainNotOwned     = errors.New("domain is not registered to this device")
-	ErrDomainDisabled     = errors.New("domain is disabled")
-	ErrDomainNotFound     = errors.New("domain not found")
+	ErrFingerprintInvalid               = errors.New("invalid certificate fingerprint")
+	ErrDeviceRevoked                    = errors.New("device is revoked")
+	ErrDomainInvalid                    = errors.New("invalid domain")
+	ErrDomainAlreadyUsed                = errors.New("domain is already registered to another device")
+	ErrDomainNotOwned                   = errors.New("domain is not registered to this device")
+	ErrDomainDisabled                   = errors.New("domain is disabled")
+	ErrDomainNotFound                   = errors.New("domain not found")
+	ErrDomainAlreadyRegistered          = errors.New("domain is already registered to this device")
+	ErrDomainOwnershipChallengeNotFound = errors.New("domain ownership challenge not found")
+	ErrDomainOwnershipChallengeExpired  = errors.New("domain ownership challenge expired")
+	ErrDomainOwnershipProofInvalid      = errors.New("domain ownership proof is invalid")
+	ErrDomainOwnershipChallengeLimit    = errors.New("domain ownership challenge limit reached")
+	ErrDomainOwnershipVerificationLimit = errors.New("domain ownership verification limit reached")
+	ErrDomainOwnershipVerificationWait  = errors.New("domain ownership verification attempted too soon")
 
 	fingerprintPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 	labelPattern       = `(?:[a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9])`
@@ -31,8 +41,310 @@ type Repository struct {
 	db *gorm.DB
 }
 
+const domainOwnershipRecordPrefix = "_relay-challenge."
+
 func NewRepository(db *gorm.DB) *Repository {
 	return &Repository{db: db}
+}
+
+func (r *Repository) GetOrCreateDomainOwnershipChallenge(
+	ctx context.Context,
+	fingerprint string,
+	fqdn string,
+	ttl time.Duration,
+	maxActive int,
+) (*DomainOwnershipChallenge, error) {
+	fingerprint, err := normalizeFingerprint(fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	fqdn, err = NormalizeDomain(fqdn)
+	if err != nil {
+		return nil, err
+	}
+	if ttl <= 0 {
+		return nil, fmt.Errorf("create domain ownership challenge: invalid ttl")
+	}
+	if maxActive <= 0 {
+		return nil, fmt.Errorf("create domain ownership challenge: invalid active challenge limit")
+	}
+
+	var challenge DomainOwnershipChallenge
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var device Device
+		if err := upsertActiveDevice(tx, fingerprint, &device); err != nil {
+			return err
+		}
+
+		var domain Domain
+		err := tx.Where("fqdn = ?", fqdn).First(&domain).Error
+		if err == nil {
+			if domain.DeviceID != device.ID {
+				return ErrDomainAlreadyUsed
+			}
+			return ErrDomainAlreadyRegistered
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("check domain registration: %w", err)
+		}
+
+		now := time.Now().UTC()
+		if err := tx.Where("expires_at <= ?", now).Delete(&DomainOwnershipChallenge{}).Error; err != nil {
+			return fmt.Errorf("delete expired domain ownership challenges: %w", err)
+		}
+		err = tx.Where("device_id = ? AND fqdn = ?", device.ID, fqdn).First(&challenge).Error
+		if err == nil && challenge.ExpiresAt.After(now) {
+			return nil
+		}
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("load domain ownership challenge: %w", err)
+		}
+
+		var activeCount int64
+		if err := tx.Model(&DomainOwnershipChallenge{}).
+			Where("device_id = ? AND expires_at > ?", device.ID, now).
+			Count(&activeCount).Error; err != nil {
+			return fmt.Errorf("count active domain ownership challenges: %w", err)
+		}
+		if activeCount >= int64(maxActive) {
+			return ErrDomainOwnershipChallengeLimit
+		}
+
+		token, err := newDomainOwnershipToken()
+		if err != nil {
+			return err
+		}
+		if challenge.ID == uuid.Nil {
+			challenge = DomainOwnershipChallenge{
+				DeviceID: device.ID,
+				FQDN:     fqdn,
+			}
+		}
+		challenge.RecordName = domainOwnershipRecordPrefix + fqdn
+		challenge.RecordValue = "relay-domain-verification=" + token
+		challenge.ExpiresAt = now.Add(ttl)
+		challenge.VerificationAttempts = 0
+		challenge.LastVerificationAt = nil
+		if err := tx.Save(&challenge).Error; err != nil {
+			return fmt.Errorf("save domain ownership challenge: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &challenge, nil
+}
+
+func (r *Repository) BeginDomainOwnershipVerification(
+	ctx context.Context,
+	fingerprint string,
+	fqdn string,
+	recordValue string,
+	maxAttempts uint32,
+	minInterval time.Duration,
+) (*DomainOwnershipChallenge, error) {
+	fingerprint, err := normalizeFingerprint(fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	fqdn, err = NormalizeDomain(fqdn)
+	if err != nil {
+		return nil, err
+	}
+	if maxAttempts == 0 || minInterval < 0 {
+		return nil, fmt.Errorf("begin domain ownership verification: invalid limits")
+	}
+
+	var challenge DomainOwnershipChallenge
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var device Device
+		if err := tx.Where("cert_fingerprint = ?", fingerprint).First(&device).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrDomainOwnershipChallengeNotFound
+			}
+			return fmt.Errorf("load challenge device: %w", err)
+		}
+
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("device_id = ? AND fqdn = ?", device.ID, fqdn).
+			First(&challenge).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrDomainOwnershipChallengeNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("lock domain ownership challenge: %w", err)
+		}
+
+		now := time.Now().UTC()
+		if !challenge.ExpiresAt.After(now) {
+			if err := tx.Delete(&challenge).Error; err != nil {
+				return fmt.Errorf("delete expired domain ownership challenge: %w", err)
+			}
+			return ErrDomainOwnershipChallengeExpired
+		}
+		if challenge.RecordValue != recordValue {
+			return ErrDomainOwnershipProofInvalid
+		}
+		if challenge.VerificationAttempts >= maxAttempts {
+			return ErrDomainOwnershipVerificationLimit
+		}
+		if challenge.LastVerificationAt != nil && now.Sub(*challenge.LastVerificationAt) < minInterval {
+			return ErrDomainOwnershipVerificationWait
+		}
+
+		challenge.VerificationAttempts++
+		challenge.LastVerificationAt = &now
+		if err := tx.Model(&challenge).Updates(map[string]any{
+			"verification_attempts": challenge.VerificationAttempts,
+			"last_verification_at":  challenge.LastVerificationAt,
+		}).Error; err != nil {
+			return fmt.Errorf("record domain ownership verification attempt: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &challenge, nil
+}
+
+func (r *Repository) DeleteExpiredDomainOwnershipChallenges(ctx context.Context) (int64, error) {
+	result := r.db.WithContext(ctx).
+		Where("expires_at <= ?", time.Now().UTC()).
+		Delete(&DomainOwnershipChallenge{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("delete expired domain ownership challenges: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+func (r *Repository) GetOwnedDomain(ctx context.Context, fingerprint string, fqdn string) (*Domain, error) {
+	fingerprint, err := normalizeFingerprint(fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	fqdn, err = NormalizeDomain(fqdn)
+	if err != nil {
+		return nil, err
+	}
+
+	var domain Domain
+	err = r.db.WithContext(ctx).
+		Joins("JOIN devices ON devices.id = domains.device_id").
+		Where("devices.cert_fingerprint = ? AND domains.fqdn = ?", fingerprint, fqdn).
+		First(&domain).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrDomainNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load owned domain: %w", err)
+	}
+	return &domain, nil
+}
+
+func (r *Repository) GetDomainOwnershipChallenge(
+	ctx context.Context,
+	fingerprint string,
+	fqdn string,
+) (*DomainOwnershipChallenge, error) {
+	fingerprint, err := normalizeFingerprint(fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	fqdn, err = NormalizeDomain(fqdn)
+	if err != nil {
+		return nil, err
+	}
+
+	var challenge DomainOwnershipChallenge
+	err = r.db.WithContext(ctx).
+		Joins("JOIN devices ON devices.id = domain_ownership_challenges.device_id").
+		Where("devices.cert_fingerprint = ? AND domain_ownership_challenges.fqdn = ?", fingerprint, fqdn).
+		First(&challenge).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrDomainOwnershipChallengeNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load domain ownership challenge: %w", err)
+	}
+	if !challenge.ExpiresAt.After(time.Now().UTC()) {
+		return nil, ErrDomainOwnershipChallengeExpired
+	}
+	return &challenge, nil
+}
+
+func (r *Repository) CompleteDomainOwnershipChallenge(
+	ctx context.Context,
+	fingerprint string,
+	fqdn string,
+	recordValue string,
+) (*Domain, error) {
+	fingerprint, err := normalizeFingerprint(fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	fqdn, err = NormalizeDomain(fqdn)
+	if err != nil {
+		return nil, err
+	}
+
+	var out Domain
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var device Device
+		if err := upsertActiveDevice(tx, fingerprint, &device); err != nil {
+			return err
+		}
+
+		var challenge DomainOwnershipChallenge
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("device_id = ? AND fqdn = ?", device.ID, fqdn).
+			First(&challenge).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrDomainOwnershipChallengeNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("lock domain ownership challenge: %w", err)
+		}
+		if !challenge.ExpiresAt.After(time.Now().UTC()) {
+			return ErrDomainOwnershipChallengeExpired
+		}
+		if challenge.RecordValue != recordValue {
+			return ErrDomainOwnershipProofInvalid
+		}
+
+		domain, err := registerDomainForDevice(tx, device.ID, fqdn)
+		if err != nil {
+			return err
+		}
+		out = domain
+
+		hist := DomainHistory{
+			DomainID: &domain.ID,
+			DeviceID: &device.ID,
+			FQDN:     domain.FQDN,
+			Action:   DomainActionRegister,
+		}
+		if err := tx.Create(&hist).Error; err != nil {
+			return fmt.Errorf("write domain history: %w", err)
+		}
+		if err := tx.Delete(&challenge).Error; err != nil {
+			return fmt.Errorf("delete domain ownership challenge: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func newDomainOwnershipToken() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("generate domain ownership token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
 }
 
 func (r *Repository) RegisterDeviceWithDomains(ctx context.Context, fingerprint string, domains []string) (*Device, []Domain, error) {

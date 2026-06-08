@@ -89,6 +89,27 @@ func (d *Domain) BeforeCreate(*gorm.DB) error {
 	return nil
 }
 
+type DomainOwnershipChallenge struct {
+	ID                   uuid.UUID `gorm:"type:uuid;primaryKey"`
+	DeviceID             uuid.UUID `gorm:"type:uuid;not null;index;uniqueIndex:domain_ownership_challenges_device_domain"`
+	Device               Device    `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	FQDN                 string    `gorm:"column:fqdn;size:253;not null;uniqueIndex:domain_ownership_challenges_device_domain"`
+	RecordName           string    `gorm:"size:253;not null"`
+	RecordValue          string    `gorm:"size:255;not null"`
+	ExpiresAt            time.Time `gorm:"not null;index"`
+	VerificationAttempts uint32
+	LastVerificationAt   *time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+func (c *DomainOwnershipChallenge) BeforeCreate(*gorm.DB) error {
+	if c.ID == uuid.Nil {
+		c.ID = uuid.New()
+	}
+	return nil
+}
+
 type DeviceSession struct {
 	ID        uuid.UUID  `gorm:"type:uuid;primaryKey"`
 	DeviceID  uuid.UUID  `gorm:"type:uuid;not null;index"`

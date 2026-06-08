@@ -25,28 +25,40 @@ if "%SECRET_API_KEY%"=="" (
     exit /b 1
 )
 
-if not exist "certs\ca.crt" (
-    echo [ERROR] certs\ca.crt not found. Run certs\generate_certs.bat first.
+if "%RELAY_DEVICE_CA_CERT_FILE%"=="" set "RELAY_DEVICE_CA_CERT_FILE=certs\ca.crt"
+if "%RELAY_DEVICE_CA_KEY_FILE%"=="" set "RELAY_DEVICE_CA_KEY_FILE=certs\ca.key"
+if "%RELAY_GRPC_CERT_FILE%"=="" set "RELAY_GRPC_CERT_FILE=certs\server.crt"
+if "%RELAY_GRPC_KEY_FILE%"=="" set "RELAY_GRPC_KEY_FILE=certs\server.key"
+if "%RELAY_ADMIN_CERT_FILE%"=="" set "RELAY_ADMIN_CERT_FILE=certs\admin.crt"
+if "%RELAY_ADMIN_KEY_FILE%"=="" set "RELAY_ADMIN_KEY_FILE=certs\admin.key"
+
+if not exist "%RELAY_DEVICE_CA_CERT_FILE%" (
+    echo [ERROR] %RELAY_DEVICE_CA_CERT_FILE% not found.
     exit /b 1
 )
 
-if not exist "certs\server.crt" (
-    echo [ERROR] certs\server.crt not found. Run certs\generate_certs.bat first.
+if not exist "%RELAY_GRPC_CERT_FILE%" (
+    echo [ERROR] %RELAY_GRPC_CERT_FILE% not found.
     exit /b 1
 )
 
-if not exist "certs\server.key" (
-    echo [ERROR] certs\server.key not found. Run certs\generate_certs.bat first.
+if not exist "%RELAY_GRPC_KEY_FILE%" (
+    echo [ERROR] %RELAY_GRPC_KEY_FILE% not found.
     exit /b 1
 )
 
-if not exist "certs\admin.crt" (
-    echo [ERROR] certs\admin.crt not found. Run certs\generate_certs.bat first.
+if not exist "%RELAY_ADMIN_CERT_FILE%" (
+    echo [ERROR] %RELAY_ADMIN_CERT_FILE% not found.
     exit /b 1
 )
 
-if not exist "certs\admin.key" (
-    echo [ERROR] certs\admin.key not found. Run certs\generate_certs.bat first.
+if not exist "%RELAY_ADMIN_KEY_FILE%" (
+    echo [ERROR] %RELAY_ADMIN_KEY_FILE% not found.
+    exit /b 1
+)
+
+if not "%RELAY_ENROLLMENT_TOKEN%"=="" if not exist "%RELAY_DEVICE_CA_KEY_FILE%" (
+    echo [ERROR] %RELAY_DEVICE_CA_KEY_FILE% not found. It is required while device enrollment is enabled.
     exit /b 1
 )
 

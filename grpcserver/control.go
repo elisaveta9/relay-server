@@ -20,7 +20,8 @@ import (
 
 type ControlServiceImpl struct {
 	controlpb.UnimplementedControlServiceServer
-	Store *storage.Repository
+	Store       *storage.Repository
+	TXTResolver txtResolver
 }
 
 const (
@@ -28,6 +29,11 @@ const (
 	defaultMaxStreamsPerDevice     = 128
 	defaultMaxFrameSizeBytes       = 8 * 1024 * 1024
 	defaultPingIntervalSeconds     = 30
+	defaultDNSChallengeTTL         = 15 * time.Minute
+	defaultDNSInstructionTTL       = 60
+	defaultMaxActiveDNSChallenges  = 32
+	defaultMaxDNSVerifyAttempts    = 10
+	defaultDNSVerifyMinInterval    = 2 * time.Second
 )
 
 func (s *ControlServiceImpl) UpdateDeviceRegistration(
@@ -136,12 +142,99 @@ func (s *ControlServiceImpl) UnregisterDomain(
 
 func (s *ControlServiceImpl) RegisterDomain(
 	ctx context.Context,
-	_ *controlpb.RegisterDomainRequest,
+	req *controlpb.RegisterDomainRequest,
 ) (*controlpb.DomainRegistrationResponse, error) {
-	if _, err := storage.ClientCertFingerprint(ctx); err != nil {
+	fingerprint, err := storage.ClientCertFingerprint(ctx)
+	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "client certificate is required: %v", err)
 	}
-	return domainRegistrationDisabled(), nil
+	domain, err := storage.NormalizeDomain(req.GetDomain())
+	if err != nil {
+		return domainRegistrationFailure("invalid domain", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_INVALID_DOMAIN), nil
+	}
+
+	proof := req.GetProof()
+	if proof == nil {
+		challenge, err := s.Store.GetOrCreateDomainOwnershipChallenge(
+			ctx,
+			fingerprint,
+			domain,
+			defaultDNSChallengeTTL,
+			envInt("RELAY_MAX_ACTIVE_DNS_CHALLENGES_PER_DEVICE", defaultMaxActiveDNSChallenges),
+		)
+		if errors.Is(err, storage.ErrDomainAlreadyRegistered) {
+			existing, loadErr := s.Store.GetOwnedDomain(ctx, fingerprint, domain)
+			if loadErr != nil {
+				return nil, storageError("load registered domain", loadErr)
+			}
+			return domainRegistrationSuccess(existing), nil
+		}
+		if errors.Is(err, storage.ErrDomainAlreadyUsed) {
+			return domainRegistrationFailure("domain already belongs to another device", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DOMAIN_ALREADY_USED), nil
+		}
+		if errors.Is(err, storage.ErrDomainOwnershipChallengeLimit) {
+			return domainRegistrationFailure("too many active DNS proof challenges", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_RATE_LIMITED), nil
+		}
+		if err != nil {
+			return nil, storageError("create DNS proof challenge", err)
+		}
+		return domainRegistrationChallenge(challenge), nil
+	}
+
+	if proof.GetType() != controlpb.ProofType_PROOF_TYPE_DNS_TXT {
+		return domainRegistrationFailure("DNS TXT proof is required", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_REQUIRED), nil
+	}
+	challenge, err := s.Store.GetDomainOwnershipChallenge(ctx, fingerprint, domain)
+	if errors.Is(err, storage.ErrDomainOwnershipChallengeNotFound) || errors.Is(err, storage.ErrDomainOwnershipChallengeExpired) {
+		return domainRegistrationFailure("DNS proof challenge is missing or expired; request a new challenge", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_REQUIRED), nil
+	}
+	if err != nil {
+		return nil, storageError("load DNS proof challenge", err)
+	}
+	if normalizeDNSName(proof.GetRecordName()) != normalizeDNSName(challenge.RecordName) ||
+		proof.GetRecordValue() != challenge.RecordValue {
+		return domainRegistrationFailure("DNS proof does not match the active challenge", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_INVALID), nil
+	}
+
+	challenge, err = s.Store.BeginDomainOwnershipVerification(
+		ctx,
+		fingerprint,
+		domain,
+		challenge.RecordValue,
+		uint32(envInt("RELAY_MAX_DNS_VERIFY_ATTEMPTS_PER_CHALLENGE", defaultMaxDNSVerifyAttempts)),
+		time.Duration(envInt("RELAY_DNS_VERIFY_MIN_INTERVAL_SECONDS", int(defaultDNSVerifyMinInterval/time.Second)))*time.Second,
+	)
+	if errors.Is(err, storage.ErrDomainOwnershipVerificationLimit) ||
+		errors.Is(err, storage.ErrDomainOwnershipVerificationWait) {
+		return domainRegistrationFailure("DNS proof verification rate limit exceeded", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_RATE_LIMITED), nil
+	}
+	if errors.Is(err, storage.ErrDomainOwnershipChallengeNotFound) ||
+		errors.Is(err, storage.ErrDomainOwnershipChallengeExpired) ||
+		errors.Is(err, storage.ErrDomainOwnershipProofInvalid) {
+		return domainRegistrationFailure("DNS proof challenge is no longer valid", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_INVALID), nil
+	}
+	if err != nil {
+		return nil, storageError("begin DNS proof verification", err)
+	}
+
+	records, err := s.txtResolver().LookupTXT(ctx, absoluteDNSName(challenge.RecordName))
+	if err != nil || !containsTXTRecord(records, challenge.RecordValue) {
+		return domainRegistrationFailure("required DNS TXT record was not found", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_INVALID), nil
+	}
+
+	registered, err := s.Store.CompleteDomainOwnershipChallenge(ctx, fingerprint, domain, challenge.RecordValue)
+	if errors.Is(err, storage.ErrDomainAlreadyUsed) {
+		return domainRegistrationFailure("domain already belongs to another device", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DOMAIN_ALREADY_USED), nil
+	}
+	if errors.Is(err, storage.ErrDomainOwnershipChallengeNotFound) ||
+		errors.Is(err, storage.ErrDomainOwnershipChallengeExpired) ||
+		errors.Is(err, storage.ErrDomainOwnershipProofInvalid) {
+		return domainRegistrationFailure("DNS proof challenge is no longer valid", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_INVALID), nil
+	}
+	if err != nil {
+		return nil, storageError("register verified domain", err)
+	}
+	return domainRegistrationSuccess(registered), nil
 }
 
 func storageError(operation string, err error) error {
@@ -163,12 +256,61 @@ func storageError(operation string, err error) error {
 	}
 }
 
-func domainRegistrationDisabled() *controlpb.DomainRegistrationResponse {
+func domainRegistrationFailure(message string, code controlpb.ControlErrorCode) *controlpb.DomainRegistrationResponse {
 	return &controlpb.DomainRegistrationResponse{
 		Success:   false,
-		Message:   "domain registration is disabled; add domains manually in the admin panel",
-		ErrorCode: controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_REQUIRED,
+		Message:   message,
+		ErrorCode: code,
 	}
+}
+
+func domainRegistrationChallenge(challenge *storage.DomainOwnershipChallenge) *controlpb.DomainRegistrationResponse {
+	return &controlpb.DomainRegistrationResponse{
+		Success:   false,
+		Message:   "create the DNS TXT record and repeat RegisterDomain with the returned proof",
+		ErrorCode: controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_REQUIRED,
+		DnsInstruction: &controlpb.DNSInstruction{
+			RecordName:      challenge.RecordName,
+			RecordType:      controlpb.DNSRecordType_DNS_RECORD_TYPE_TXT,
+			RecordValue:     challenge.RecordValue,
+			TtlSeconds:      defaultDNSInstructionTTL,
+			Purpose:         "relay domain ownership verification",
+			ExpiresAtUnixMs: challenge.ExpiresAt.UnixMilli(),
+		},
+	}
+}
+
+func domainRegistrationSuccess(domain *storage.Domain) *controlpb.DomainRegistrationResponse {
+	info := domainInfos([]storage.Domain{*domain})[0]
+	return &controlpb.DomainRegistrationResponse{
+		Success: true,
+		Message: "domain registered",
+		Domain:  info,
+	}
+}
+
+func (s *ControlServiceImpl) txtResolver() txtResolver {
+	if s.TXTResolver != nil {
+		return s.TXTResolver
+	}
+	return netTXTResolver{}
+}
+
+func normalizeDNSName(name string) string {
+	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(name)), ".")
+}
+
+func absoluteDNSName(name string) string {
+	return normalizeDNSName(name) + "."
+}
+
+func containsTXTRecord(records []string, expected string) bool {
+	for _, record := range records {
+		if strings.TrimSpace(record) == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func deviceConfig(domains []*controlpb.DomainInfo) *controlpb.GetDeviceConfigResponse {
