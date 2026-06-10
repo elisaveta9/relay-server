@@ -28,6 +28,20 @@ var allDomainStatuses = []DomainStatus{
 	DomainStatusDisabled,
 }
 
+type DomainOwnershipChallengeStatus string
+
+const (
+	DomainOwnershipChallengeStatusPending  DomainOwnershipChallengeStatus = "pending"
+	DomainOwnershipChallengeStatusVerified DomainOwnershipChallengeStatus = "verified"
+	DomainOwnershipChallengeStatusExpired  DomainOwnershipChallengeStatus = "expired"
+)
+
+var allDomainOwnershipChallengeStatuses = []DomainOwnershipChallengeStatus{
+	DomainOwnershipChallengeStatusPending,
+	DomainOwnershipChallengeStatusVerified,
+	DomainOwnershipChallengeStatusExpired,
+}
+
 type CertificateOrderStatus string
 
 const (
@@ -90,15 +104,19 @@ func (d *Domain) BeforeCreate(*gorm.DB) error {
 }
 
 type DomainOwnershipChallenge struct {
-	ID                   uuid.UUID `gorm:"type:uuid;primaryKey"`
-	DeviceID             uuid.UUID `gorm:"type:uuid;not null;index;uniqueIndex:domain_ownership_challenges_device_domain"`
-	Device               Device    `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	FQDN                 string    `gorm:"column:fqdn;size:253;not null;uniqueIndex:domain_ownership_challenges_device_domain"`
-	RecordName           string    `gorm:"size:253;not null"`
-	RecordValue          string    `gorm:"size:255;not null"`
-	ExpiresAt            time.Time `gorm:"not null;index"`
+	ID                   uuid.UUID                      `gorm:"type:uuid;primaryKey"`
+	DeviceID             uuid.UUID                      `gorm:"type:uuid;not null;index;uniqueIndex:domain_ownership_challenges_device_domain"`
+	Device               Device                         `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	FQDN                 string                         `gorm:"column:fqdn;size:253;not null;uniqueIndex:domain_ownership_challenges_device_domain"`
+	RecordName           string                         `gorm:"size:253;not null"`
+	RecordValue          string                         `gorm:"size:255;not null"`
+	Status               DomainOwnershipChallengeStatus `gorm:"type:text;not null;default:'pending';index"`
+	ExpiresAt            time.Time                      `gorm:"not null;index"`
+	NextVerificationAt   *time.Time                     `gorm:"index"`
 	VerificationAttempts uint32
 	LastVerificationAt   *time.Time
+	LastError            string `gorm:"type:text;not null;default:''"`
+	VerifiedAt           *time.Time
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }

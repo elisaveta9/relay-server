@@ -166,6 +166,14 @@ func NewDomainSyncFrame(domains []*DomainBinding) *Frame {
 	}
 }
 
+func NewDomainVerificationUpdateFrame(update *DomainVerificationUpdate) *Frame {
+	return &Frame{
+		Body: &Frame_DomainVerificationUpdate{
+			DomainVerificationUpdate: update,
+		},
+	}
+}
+
 func IsControlFrame(f *Frame) bool {
 	switch f.GetBody().(type) {
 	case *Frame_Hello,
@@ -179,7 +187,8 @@ func IsControlFrame(f *Frame) bool {
 		*Frame_UnbindRequest,
 		*Frame_UnbindResult,
 		*Frame_DomainSync,
-		*Frame_DomainRevoked:
+		*Frame_DomainRevoked,
+		*Frame_DomainVerificationUpdate:
 		return true
 	case *Frame_StreamOpenResult:
 		return false

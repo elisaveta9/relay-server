@@ -342,6 +342,23 @@ func TestNewDeviceWithLimitsStoresMaxFrameSize(t *testing.T) {
 	}
 }
 
+func TestDeviceSupportedFeatures(t *testing.T) {
+	d := NewDeviceWithLimits(nil, "fingerprint", "session", 4, 12345)
+	defer d.Close()
+
+	d.SetSupportedFeatures([]string{" tunnel.v2 ", "", "domain-verification-events"})
+
+	if !d.SupportsFeature("domain-verification-events") {
+		t.Fatal("domain-verification-events feature is not supported")
+	}
+	if !d.SupportsFeature("tunnel.v2") {
+		t.Fatal("tunnel.v2 feature is not supported")
+	}
+	if d.SupportsFeature("unknown") {
+		t.Fatal("unknown feature is supported")
+	}
+}
+
 func TestSendFrameRejectsSerializedFrameAboveLimit(t *testing.T) {
 	d := newTestDevice(4, 2, 4)
 	d.maxFrameSizeBytes = 6

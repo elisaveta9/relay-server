@@ -73,6 +73,41 @@ Go 1.24+ установите из пакетов дистрибутива, snap
    - `RELAY_DATA_BUDGET` - доля data frames в writer loop.
    - `RELAY_DATA_QUEUE_SOFT_LIMIT` - мягкий порог перегрузки data queue.
    - `RELAY_DATA_QUEUE_HARD_LIMIT` - жесткий порог перегрузки data queue.
+   - `RELAY_DNS_CHALLENGE_TTL_SECONDS` - срок действия DNS challenge,
+     по умолчанию `86400` секунд.
+   - `RELAY_DNS_INSTRUCTION_TTL_SECONDS` - рекомендуемый TTL создаваемой
+     TXT-записи, по умолчанию `300` секунд.
+   - `RELAY_DNS_VERIFY_MIN_INTERVAL_SECONDS` - минимальный интервал между
+     ручными DNS-проверками одного challenge, по умолчанию `60` секунд.
+   - `RELAY_DNS_VERIFY_INITIAL_INTERVAL_SECONDS` - задержка до первой
+     автоматической проверки, по умолчанию `30` секунд.
+   - `RELAY_DNS_VERIFY_MAX_INTERVAL_SECONDS` - максимальный интервал
+     автоматического backoff, по умолчанию `900` секунд.
+   - `RELAY_DNS_VERIFY_JITTER_PERCENT` - случайное отклонение интервала,
+     по умолчанию `10` процентов.
+   - `RELAY_DNS_VERIFY_WORKER_INTERVAL_SECONDS` - период поиска due challenge,
+     по умолчанию `5` секунд.
+   - `RELAY_DNS_VERIFY_WORKER_BATCH_SIZE` - размер batch фонового worker,
+     по умолчанию `32`.
+   - `RELAY_DNS_VERIFY_WORKER_CONCURRENCY` - максимум параллельных DNS-проверок
+     одного worker, по умолчанию `8`.
+   - `RELAY_DNS_VERIFY_CLAIM_LEASE_SECONDS` - срок резервирования challenge
+     worker-ом, по умолчанию `30` секунд.
+   - `RELAY_DNS_VERIFY_LOOKUP_TIMEOUT_SECONDS` - таймаут одного DNS lookup,
+     по умолчанию `5` секунд.
+   - `RELAY_MAX_ACTIVE_DNS_CHALLENGES_PER_DEVICE` - максимум одновременно
+     активных challenge устройства, по умолчанию `32`.
+   - `RELAY_MAX_DNS_VERIFY_ATTEMPTS_PER_CHALLENGE` - необязательный жесткий
+     лимит прямых запросов проверки. Фоновый worker продолжает проверки
+     до успеха или истечения challenge.
+
+   Повторный запрос регистрации до истечения challenge возвращает то же имя
+   и значение TXT-записи. Новый токен создается только после истечения
+   предыдущего challenge. Автоматические проверки выполняются с
+   backoff `30 секунд, 1, 2, 5, 10 и 15 минут`. Результат сохраняется
+   в PostgreSQL. При живом туннеле устройство получает
+   `DomainVerificationUpdate`, а при следующем подключении актуальные
+   состояния `pending`, `verified` и `expired` передаются в `Welcome`.
 
 3. Создайте базу PostgreSQL, указанную в `DATABASE_URL`.
 

@@ -42,6 +42,7 @@ message UpdateDeviceRegistrationResponse {
   repeated string server_features = 4;
 
   repeated DomainInfo domains = 10;
+  repeated DomainVerificationInfo domain_verifications = 11;
 }
 
 message GetDeviceConfigRequest {}
@@ -62,12 +63,14 @@ message GetDeviceConfigResponse {
 
   repeated string server_features = 30;
   repeated DomainInfo domains = 40;
+  repeated DomainVerificationInfo domain_verifications = 41;
 }
 
 message ListDomainsRequest {}
 
 message ListDomainsResponse {
   repeated DomainInfo domains = 1;
+  repeated DomainVerificationInfo domain_verifications = 2;
 }
 
 message UnregisterDomainRequest {
@@ -83,8 +86,6 @@ message UnregisterDomainResponse {
 message RegisterDomainRequest {
   string domain = 1;
 
-  // Relay-specific proof that authorizes SNI routing for this domain.
-  // It is not an ACME challenge and is not used to issue certificates.
   DomainOwnershipProof proof = 2;
 }
 
@@ -101,6 +102,7 @@ message DomainRegistrationResponse {
 
   DomainInfo domain = 10;
   DNSInstruction dns_instruction = 11;
+  DomainVerificationInfo verification = 12;
 }
 
 message DNSInstruction {
@@ -123,12 +125,31 @@ message DomainInfo {
   int64 updated_at_unix_ms = 6;
 }
 
+message DomainVerificationInfo {
+  string domain = 1;
+  DomainVerificationStatus status = 2;
+  DNSInstruction dns_instruction = 3;
+  uint32 verification_attempts = 4;
+  int64 next_verification_at_unix_ms = 5;
+  int64 last_verification_at_unix_ms = 6;
+  string last_error = 7;
+  int64 verified_at_unix_ms = 8;
+  bool can_request_new_challenge = 9;
+}
+
 enum DomainStatus {
   DOMAIN_STATUS_UNSPECIFIED = 0;
   DOMAIN_STATUS_PENDING_DNS = 1;
   DOMAIN_STATUS_REGISTERED = 2;
   DOMAIN_STATUS_DISABLED = 3;
   DOMAIN_STATUS_REVOKED = 4;
+}
+
+enum DomainVerificationStatus {
+  DOMAIN_VERIFICATION_STATUS_UNSPECIFIED = 0;
+  DOMAIN_VERIFICATION_STATUS_PENDING = 1;
+  DOMAIN_VERIFICATION_STATUS_VERIFIED = 2;
+  DOMAIN_VERIFICATION_STATUS_EXPIRED = 3;
 }
 
 enum ProofType {

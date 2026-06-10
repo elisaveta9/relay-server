@@ -62,6 +62,19 @@ func (r *Registry) DevicesSnapshot() []*device.Device {
 	return devices
 }
 
+func (r *Registry) DevicesForFingerprint(fingerprint string) []*device.Device {
+	r.Mu.RLock()
+	defer r.Mu.RUnlock()
+
+	devices := make([]*device.Device, 0, 1)
+	for dev := range r.Devices {
+		if dev != nil && dev.Fingerprint == fingerprint {
+			devices = append(devices, dev)
+		}
+	}
+	return devices
+}
+
 func (r *Registry) Bind(domain string, dev *device.Device) (*device.Device, bool) {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()

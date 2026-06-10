@@ -48,6 +48,9 @@ type Device struct {
 
 	maxFrameSizeBytes uint32
 
+	supportedFeaturesMu sync.RWMutex
+	supportedFeatures   map[string]struct{}
+
 	controlCh chan *tunnelpb.Frame
 	dataCh    chan *tunnelpb.Frame
 
@@ -96,6 +99,27 @@ func NewDeviceWithMaxStreams(stream tunnelpb.TunnelService_TunnelServer, fingerp
 
 func NewDeviceWithLimits(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, sessionID string, maxStreams int, maxFrameSizeBytes uint32) *Device {
 	return newDevice(stream, fingerprint, sessionID, maxStreams, maxFrameSizeBytes)
+}
+
+func (d *Device) SetSupportedFeatures(features []string) {
+	supported := make(map[string]struct{}, len(features))
+	for _, feature := range features {
+		feature = strings.TrimSpace(feature)
+		if feature != "" {
+			supported[feature] = struct{}{}
+		}
+	}
+
+	d.supportedFeaturesMu.Lock()
+	d.supportedFeatures = supported
+	d.supportedFeaturesMu.Unlock()
+}
+
+func (d *Device) SupportsFeature(feature string) bool {
+	d.supportedFeaturesMu.RLock()
+	_, ok := d.supportedFeatures[feature]
+	d.supportedFeaturesMu.RUnlock()
+	return ok
 }
 
 func newDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, sessionID string, maxStreamsOverride int, maxFrameSizeBytesOverride uint32) *Device {
@@ -641,6 +665,8 @@ func frameBodyName(f *tunnelpb.Frame) string {
 		return "domain_sync"
 	case *tunnelpb.Frame_DomainRevoked:
 		return "domain_revoked"
+	case *tunnelpb.Frame_DomainVerificationUpdate:
+		return "domain_verification_update"
 	default:
 		return "unknown"
 	}

@@ -122,6 +122,56 @@ func (DomainStatus) EnumDescriptor() ([]byte, []int) {
 	return file_proto_tunnel_proto_rawDescGZIP(), []int{1}
 }
 
+type DomainVerificationStatus int32
+
+const (
+	DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_UNSPECIFIED DomainVerificationStatus = 0
+	DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_PENDING     DomainVerificationStatus = 1
+	DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_VERIFIED    DomainVerificationStatus = 2
+	DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_EXPIRED     DomainVerificationStatus = 3
+)
+
+var (
+	DomainVerificationStatus_name = map[int32]string{
+		0: "DOMAIN_VERIFICATION_STATUS_UNSPECIFIED",
+		1: "DOMAIN_VERIFICATION_STATUS_PENDING",
+		2: "DOMAIN_VERIFICATION_STATUS_VERIFIED",
+		3: "DOMAIN_VERIFICATION_STATUS_EXPIRED",
+	}
+	DomainVerificationStatus_value = map[string]int32{
+		"DOMAIN_VERIFICATION_STATUS_UNSPECIFIED": 0,
+		"DOMAIN_VERIFICATION_STATUS_PENDING":     1,
+		"DOMAIN_VERIFICATION_STATUS_VERIFIED":    2,
+		"DOMAIN_VERIFICATION_STATUS_EXPIRED":     3,
+	}
+)
+
+func (x DomainVerificationStatus) Enum() *DomainVerificationStatus {
+	p := new(DomainVerificationStatus)
+	*p = x
+	return p
+}
+
+func (x DomainVerificationStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DomainVerificationStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_tunnel_proto_enumTypes[2].Descriptor()
+}
+
+func (DomainVerificationStatus) Type() protoreflect.EnumType {
+	return &file_proto_tunnel_proto_enumTypes[2]
+}
+
+func (x DomainVerificationStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+func (DomainVerificationStatus) EnumDescriptor() ([]byte, []int) {
+	return file_proto_tunnel_proto_rawDescGZIP(), []int{2}
+}
+
 type CloseReason int32
 
 const (
@@ -134,7 +184,6 @@ const (
 	CloseReason_CLOSE_REASON_ERROR         CloseReason = 6
 )
 
-// Enum value maps for CloseReason.
 var (
 	CloseReason_name = map[int32]string{
 		0: "CLOSE_REASON_UNSPECIFIED",
@@ -167,11 +216,11 @@ func (x CloseReason) String() string {
 }
 
 func (CloseReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_tunnel_proto_enumTypes[2].Descriptor()
+	return file_proto_tunnel_proto_enumTypes[3].Descriptor()
 }
 
 func (CloseReason) Type() protoreflect.EnumType {
-	return &file_proto_tunnel_proto_enumTypes[2]
+	return &file_proto_tunnel_proto_enumTypes[3]
 }
 
 func (x CloseReason) Number() protoreflect.EnumNumber {
@@ -180,7 +229,7 @@ func (x CloseReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CloseReason.Descriptor instead.
 func (CloseReason) EnumDescriptor() ([]byte, []int) {
-	return file_proto_tunnel_proto_rawDescGZIP(), []int{2}
+	return file_proto_tunnel_proto_rawDescGZIP(), []int{3}
 }
 
 type DisconnectReason int32
@@ -196,7 +245,6 @@ const (
 	DisconnectReason_DISCONNECT_REASON_IDLE_TIMEOUT      DisconnectReason = 7
 )
 
-// Enum value maps for DisconnectReason.
 var (
 	DisconnectReason_name = map[int32]string{
 		0: "DISCONNECT_REASON_UNSPECIFIED",
@@ -231,11 +279,11 @@ func (x DisconnectReason) String() string {
 }
 
 func (DisconnectReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_tunnel_proto_enumTypes[3].Descriptor()
+	return file_proto_tunnel_proto_enumTypes[4].Descriptor()
 }
 
 func (DisconnectReason) Type() protoreflect.EnumType {
-	return &file_proto_tunnel_proto_enumTypes[3]
+	return &file_proto_tunnel_proto_enumTypes[4]
 }
 
 func (x DisconnectReason) Number() protoreflect.EnumNumber {
@@ -244,7 +292,7 @@ func (x DisconnectReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DisconnectReason.Descriptor instead.
 func (DisconnectReason) EnumDescriptor() ([]byte, []int) {
-	return file_proto_tunnel_proto_rawDescGZIP(), []int{3}
+	return file_proto_tunnel_proto_rawDescGZIP(), []int{4}
 }
 
 type DomainRevokeReason int32
@@ -283,11 +331,11 @@ func (x DomainRevokeReason) String() string {
 }
 
 func (DomainRevokeReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_tunnel_proto_enumTypes[4].Descriptor()
+	return file_proto_tunnel_proto_enumTypes[5].Descriptor()
 }
 
 func (DomainRevokeReason) Type() protoreflect.EnumType {
-	return &file_proto_tunnel_proto_enumTypes[4]
+	return &file_proto_tunnel_proto_enumTypes[5]
 }
 
 func (x DomainRevokeReason) Number() protoreflect.EnumNumber {
@@ -296,7 +344,7 @@ func (x DomainRevokeReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DomainRevokeReason.Descriptor instead.
 func (DomainRevokeReason) EnumDescriptor() ([]byte, []int) {
-	return file_proto_tunnel_proto_rawDescGZIP(), []int{4}
+	return file_proto_tunnel_proto_rawDescGZIP(), []int{5}
 }
 
 type TunnelErrorCode int32
@@ -368,11 +416,11 @@ func (x TunnelErrorCode) String() string {
 }
 
 func (TunnelErrorCode) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_tunnel_proto_enumTypes[5].Descriptor()
+	return file_proto_tunnel_proto_enumTypes[6].Descriptor()
 }
 
 func (TunnelErrorCode) Type() protoreflect.EnumType {
-	return &file_proto_tunnel_proto_enumTypes[5]
+	return &file_proto_tunnel_proto_enumTypes[6]
 }
 
 func (x TunnelErrorCode) Number() protoreflect.EnumNumber {
@@ -381,7 +429,7 @@ func (x TunnelErrorCode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TunnelErrorCode.Descriptor instead.
 func (TunnelErrorCode) EnumDescriptor() ([]byte, []int) {
-	return file_proto_tunnel_proto_rawDescGZIP(), []int{5}
+	return file_proto_tunnel_proto_rawDescGZIP(), []int{6}
 }
 
 type Frame struct {
@@ -407,6 +455,7 @@ type Frame struct {
 	//	*Frame_UnbindResult
 	//	*Frame_DomainSync
 	//	*Frame_DomainRevoked
+	//	*Frame_DomainVerificationUpdate
 	Body          isFrame_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -616,6 +665,15 @@ func (x *Frame) GetDomainRevoked() *DomainRevoked {
 	return nil
 }
 
+func (x *Frame) GetDomainVerificationUpdate() *DomainVerificationUpdate {
+	if x != nil {
+		if x, ok := x.Body.(*Frame_DomainVerificationUpdate); ok {
+			return x.DomainVerificationUpdate
+		}
+	}
+	return nil
+}
+
 type isFrame_Body interface {
 	isFrame_Body()
 }
@@ -688,6 +746,10 @@ type Frame_DomainRevoked struct {
 	DomainRevoked *DomainRevoked `protobuf:"bytes,35,opt,name=domain_revoked,json=domainRevoked,proto3,oneof"`
 }
 
+type Frame_DomainVerificationUpdate struct {
+	DomainVerificationUpdate *DomainVerificationUpdate `protobuf:"bytes,36,opt,name=domain_verification_update,json=domainVerificationUpdate,proto3,oneof"`
+}
+
 func (*Frame_StreamData) isFrame_Body() {}
 
 func (*Frame_StreamOpen) isFrame_Body() {}
@@ -721,6 +783,8 @@ func (*Frame_UnbindResult) isFrame_Body() {}
 func (*Frame_DomainSync) isFrame_Body() {}
 
 func (*Frame_DomainRevoked) isFrame_Body() {}
+
+func (*Frame_DomainVerificationUpdate) isFrame_Body() {}
 
 type Hello struct {
 	state                        protoimpl.MessageState `protogen:"open.v1"`
@@ -815,19 +879,18 @@ func (x *Hello) GetPreviousSessionId() string {
 }
 
 type Welcome struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	SessionId               string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	ServerTimeUnixMs        int64                  `protobuf:"varint,2,opt,name=server_time_unix_ms,json=serverTimeUnixMs,proto3" json:"server_time_unix_ms,omitempty"`
-	AcceptedProtocolVersion uint32                 `protobuf:"varint,3,opt,name=accepted_protocol_version,json=acceptedProtocolVersion,proto3" json:"accepted_protocol_version,omitempty"`
-	ServerFeatures          []string               `protobuf:"bytes,4,rep,name=server_features,json=serverFeatures,proto3" json:"server_features,omitempty"`
-	MaxConcurrentStreams    uint32                 `protobuf:"varint,10,opt,name=max_concurrent_streams,json=maxConcurrentStreams,proto3" json:"max_concurrent_streams,omitempty"`
-	MaxFrameSizeBytes       uint32                 `protobuf:"varint,11,opt,name=max_frame_size_bytes,json=maxFrameSizeBytes,proto3" json:"max_frame_size_bytes,omitempty"`
-	PingIntervalSeconds     uint32                 `protobuf:"varint,12,opt,name=ping_interval_seconds,json=pingIntervalSeconds,proto3" json:"ping_interval_seconds,omitempty"`
-	// Domains registered to the authenticated device and authorized for
-	// binding in this tunnel session.
-	AuthorizedDomains []*DomainBinding `protobuf:"bytes,20,rep,name=authorized_domains,json=authorizedDomains,proto3" json:"authorized_domains,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                   protoimpl.MessageState      `protogen:"open.v1"`
+	SessionId               string                      `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ServerTimeUnixMs        int64                       `protobuf:"varint,2,opt,name=server_time_unix_ms,json=serverTimeUnixMs,proto3" json:"server_time_unix_ms,omitempty"`
+	AcceptedProtocolVersion uint32                      `protobuf:"varint,3,opt,name=accepted_protocol_version,json=acceptedProtocolVersion,proto3" json:"accepted_protocol_version,omitempty"`
+	ServerFeatures          []string                    `protobuf:"bytes,4,rep,name=server_features,json=serverFeatures,proto3" json:"server_features,omitempty"`
+	MaxConcurrentStreams    uint32                      `protobuf:"varint,10,opt,name=max_concurrent_streams,json=maxConcurrentStreams,proto3" json:"max_concurrent_streams,omitempty"`
+	MaxFrameSizeBytes       uint32                      `protobuf:"varint,11,opt,name=max_frame_size_bytes,json=maxFrameSizeBytes,proto3" json:"max_frame_size_bytes,omitempty"`
+	PingIntervalSeconds     uint32                      `protobuf:"varint,12,opt,name=ping_interval_seconds,json=pingIntervalSeconds,proto3" json:"ping_interval_seconds,omitempty"`
+	AuthorizedDomains       []*DomainBinding            `protobuf:"bytes,20,rep,name=authorized_domains,json=authorizedDomains,proto3" json:"authorized_domains,omitempty"`
+	DomainVerifications     []*DomainVerificationUpdate `protobuf:"bytes,21,rep,name=domain_verifications,json=domainVerifications,proto3" json:"domain_verifications,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *Welcome) Reset() {
@@ -912,6 +975,13 @@ func (x *Welcome) GetPingIntervalSeconds() uint32 {
 func (x *Welcome) GetAuthorizedDomains() []*DomainBinding {
 	if x != nil {
 		return x.AuthorizedDomains
+	}
+	return nil
+}
+
+func (x *Welcome) GetDomainVerifications() []*DomainVerificationUpdate {
+	if x != nil {
+		return x.DomainVerifications
 	}
 	return nil
 }
@@ -1792,11 +1862,143 @@ func (x *DomainRevoked) GetRevokeReason() DomainRevokeReason {
 	return DomainRevokeReason_DOMAIN_REVOKE_REASON_UNSPECIFIED
 }
 
+type DomainVerificationUpdate struct {
+	state                    protoimpl.MessageState   `protogen:"open.v1"`
+	Domain                   string                   `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Status                   DomainVerificationStatus `protobuf:"varint,2,opt,name=status,proto3,enum=tunnel.v2.DomainVerificationStatus" json:"status,omitempty"`
+	RecordName               string                   `protobuf:"bytes,3,opt,name=record_name,json=recordName,proto3" json:"record_name,omitempty"`
+	RecordValue              string                   `protobuf:"bytes,4,opt,name=record_value,json=recordValue,proto3" json:"record_value,omitempty"`
+	TtlSeconds               uint32                   `protobuf:"varint,5,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	ExpiresAtUnixMs          int64                    `protobuf:"varint,6,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	VerificationAttempts     uint32                   `protobuf:"varint,7,opt,name=verification_attempts,json=verificationAttempts,proto3" json:"verification_attempts,omitempty"`
+	NextVerificationAtUnixMs int64                    `protobuf:"varint,8,opt,name=next_verification_at_unix_ms,json=nextVerificationAtUnixMs,proto3" json:"next_verification_at_unix_ms,omitempty"`
+	LastVerificationAtUnixMs int64                    `protobuf:"varint,9,opt,name=last_verification_at_unix_ms,json=lastVerificationAtUnixMs,proto3" json:"last_verification_at_unix_ms,omitempty"`
+	LastError                string                   `protobuf:"bytes,10,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	VerifiedAtUnixMs         int64                    `protobuf:"varint,11,opt,name=verified_at_unix_ms,json=verifiedAtUnixMs,proto3" json:"verified_at_unix_ms,omitempty"`
+	CanRequestNewChallenge   bool                     `protobuf:"varint,12,opt,name=can_request_new_challenge,json=canRequestNewChallenge,proto3" json:"can_request_new_challenge,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *DomainVerificationUpdate) Reset() {
+	*x = DomainVerificationUpdate{}
+	mi := &file_proto_tunnel_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DomainVerificationUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DomainVerificationUpdate) ProtoMessage() {}
+
+func (x *DomainVerificationUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_tunnel_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DomainVerificationUpdate.ProtoReflect.Descriptor instead.
+func (*DomainVerificationUpdate) Descriptor() ([]byte, []int) {
+	return file_proto_tunnel_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *DomainVerificationUpdate) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *DomainVerificationUpdate) GetStatus() DomainVerificationStatus {
+	if x != nil {
+		return x.Status
+	}
+	return DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_UNSPECIFIED
+}
+
+func (x *DomainVerificationUpdate) GetRecordName() string {
+	if x != nil {
+		return x.RecordName
+	}
+	return ""
+}
+
+func (x *DomainVerificationUpdate) GetRecordValue() string {
+	if x != nil {
+		return x.RecordValue
+	}
+	return ""
+}
+
+func (x *DomainVerificationUpdate) GetTtlSeconds() uint32 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+func (x *DomainVerificationUpdate) GetExpiresAtUnixMs() int64 {
+	if x != nil {
+		return x.ExpiresAtUnixMs
+	}
+	return 0
+}
+
+func (x *DomainVerificationUpdate) GetVerificationAttempts() uint32 {
+	if x != nil {
+		return x.VerificationAttempts
+	}
+	return 0
+}
+
+func (x *DomainVerificationUpdate) GetNextVerificationAtUnixMs() int64 {
+	if x != nil {
+		return x.NextVerificationAtUnixMs
+	}
+	return 0
+}
+
+func (x *DomainVerificationUpdate) GetLastVerificationAtUnixMs() int64 {
+	if x != nil {
+		return x.LastVerificationAtUnixMs
+	}
+	return 0
+}
+
+func (x *DomainVerificationUpdate) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *DomainVerificationUpdate) GetVerifiedAtUnixMs() int64 {
+	if x != nil {
+		return x.VerifiedAtUnixMs
+	}
+	return 0
+}
+
+func (x *DomainVerificationUpdate) GetCanRequestNewChallenge() bool {
+	if x != nil {
+		return x.CanRequestNewChallenge
+	}
+	return false
+}
+
 var File_proto_tunnel_proto protoreflect.FileDescriptor
 
 const file_proto_tunnel_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/tunnel.proto\x12\ttunnel.v2\"\xeb\a\n" +
+	"\x12proto/tunnel.proto\x12\ttunnel.v2\"\xd0\b\n" +
 	"\x05Frame\x12\x1b\n" +
 	"\tstream_id\x18\x01 \x01(\x04R\bstreamId\x12\x1d\n" +
 	"\n" +
@@ -1822,7 +2024,8 @@ const file_proto_tunnel_proto_rawDesc = "" +
 	"\runbind_result\x18! \x01(\v2\x17.tunnel.v2.UnbindResultH\x00R\funbindResult\x128\n" +
 	"\vdomain_sync\x18\" \x01(\v2\x15.tunnel.v2.DomainSyncH\x00R\n" +
 	"domainSync\x12A\n" +
-	"\x0edomain_revoked\x18# \x01(\v2\x18.tunnel.v2.DomainRevokedH\x00R\rdomainRevokedB\x06\n" +
+	"\x0edomain_revoked\x18# \x01(\v2\x18.tunnel.v2.DomainRevokedH\x00R\rdomainRevoked\x12c\n" +
+	"\x1adomain_verification_update\x18$ \x01(\v2#.tunnel.v2.DomainVerificationUpdateH\x00R\x18domainVerificationUpdateB\x06\n" +
 	"\x04body\"\xe6\x02\n" +
 	"\x05Hello\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12%\n" +
@@ -1832,7 +2035,7 @@ const file_proto_tunnel_proto_rawDesc = "" +
 	" \x01(\rR\x14maxConcurrentStreams\x12/\n" +
 	"\x14max_frame_size_bytes\x18\v \x01(\rR\x11maxFrameSizeBytes\x12E\n" +
 	"\x1fpreferred_ping_interval_seconds\x18\f \x01(\rR\x1cpreferredPingIntervalSeconds\x12.\n" +
-	"\x13previous_session_id\x18\x14 \x01(\tR\x11previousSessionId\"\xa0\x03\n" +
+	"\x13previous_session_id\x18\x14 \x01(\tR\x11previousSessionId\"\xf8\x03\n" +
 	"\aWelcome\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12-\n" +
@@ -1843,7 +2046,8 @@ const file_proto_tunnel_proto_rawDesc = "" +
 	" \x01(\rR\x14maxConcurrentStreams\x12/\n" +
 	"\x14max_frame_size_bytes\x18\v \x01(\rR\x11maxFrameSizeBytes\x122\n" +
 	"\x15ping_interval_seconds\x18\f \x01(\rR\x13pingIntervalSeconds\x12G\n" +
-	"\x12authorized_domains\x18\x14 \x03(\v2\x18.tunnel.v2.DomainBindingR\x11authorizedDomains\"E\n" +
+	"\x12authorized_domains\x18\x14 \x03(\v2\x18.tunnel.v2.DomainBindingR\x11authorizedDomains\x12V\n" +
+	"\x14domain_verifications\x18\x15 \x03(\v2#.tunnel.v2.DomainVerificationUpdateR\x13domainVerifications\"E\n" +
 	"\x04Ping\x12\x16\n" +
 	"\x06opaque\x18\x01 \x01(\fR\x06opaque\x12%\n" +
 	"\x0fsent_at_unix_ms\x18\x02 \x01(\x04R\fsentAtUnixMs\"u\n" +
@@ -1908,7 +2112,24 @@ const file_proto_tunnel_proto_rawDesc = "" +
 	"\rDomainRevoked\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12B\n" +
-	"\rrevoke_reason\x18\x03 \x01(\x0e2\x1d.tunnel.v2.DomainRevokeReasonR\frevokeReason*I\n" +
+	"\rrevoke_reason\x18\x03 \x01(\x0e2\x1d.tunnel.v2.DomainRevokeReasonR\frevokeReason\"\xbf\x04\n" +
+	"\x18DomainVerificationUpdate\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\x12;\n" +
+	"\x06status\x18\x02 \x01(\x0e2#.tunnel.v2.DomainVerificationStatusR\x06status\x12\x1f\n" +
+	"\vrecord_name\x18\x03 \x01(\tR\n" +
+	"recordName\x12!\n" +
+	"\frecord_value\x18\x04 \x01(\tR\vrecordValue\x12\x1f\n" +
+	"\vttl_seconds\x18\x05 \x01(\rR\n" +
+	"ttlSeconds\x12+\n" +
+	"\x12expires_at_unix_ms\x18\x06 \x01(\x03R\x0fexpiresAtUnixMs\x123\n" +
+	"\x15verification_attempts\x18\a \x01(\rR\x14verificationAttempts\x12>\n" +
+	"\x1cnext_verification_at_unix_ms\x18\b \x01(\x03R\x18nextVerificationAtUnixMs\x12>\n" +
+	"\x1clast_verification_at_unix_ms\x18\t \x01(\x03R\x18lastVerificationAtUnixMs\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\n" +
+	" \x01(\tR\tlastError\x12-\n" +
+	"\x13verified_at_unix_ms\x18\v \x01(\x03R\x10verifiedAtUnixMs\x129\n" +
+	"\x19can_request_new_challenge\x18\f \x01(\bR\x16canRequestNewChallenge*I\n" +
 	"\tServeMode\x12\x1a\n" +
 	"\x16SERVE_MODE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cSERVE_MODE_HTTPS_PASSTHROUGH\x10\x01*\xa1\x01\n" +
@@ -1917,7 +2138,12 @@ const file_proto_tunnel_proto_rawDesc = "" +
 	"\x19DOMAIN_STATUS_PENDING_DNS\x10\x01\x12\x1c\n" +
 	"\x18DOMAIN_STATUS_REGISTERED\x10\x02\x12\x1a\n" +
 	"\x16DOMAIN_STATUS_DISABLED\x10\x03\x12\x19\n" +
-	"\x15DOMAIN_STATUS_REVOKED\x10\x04*\xd9\x01\n" +
+	"\x15DOMAIN_STATUS_REVOKED\x10\x04*\xbf\x01\n" +
+	"\x18DomainVerificationStatus\x12*\n" +
+	"&DOMAIN_VERIFICATION_STATUS_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"DOMAIN_VERIFICATION_STATUS_PENDING\x10\x01\x12'\n" +
+	"#DOMAIN_VERIFICATION_STATUS_VERIFIED\x10\x02\x12&\n" +
+	"\"DOMAIN_VERIFICATION_STATUS_EXPIRED\x10\x03*\xd9\x01\n" +
 	"\vCloseReason\x12\x1c\n" +
 	"\x18CLOSE_REASON_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13CLOSE_REASON_NORMAL\x10\x01\x12\x1e\n" +
@@ -1973,71 +2199,76 @@ func file_proto_tunnel_proto_rawDescGZIP() []byte {
 	return file_proto_tunnel_proto_rawDescData
 }
 
-var file_proto_tunnel_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_proto_tunnel_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_proto_tunnel_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_proto_tunnel_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_proto_tunnel_proto_goTypes = []any{
-	(ServeMode)(0),           // 0: tunnel.v2.ServeMode
-	(DomainStatus)(0),        // 1: tunnel.v2.DomainStatus
-	(CloseReason)(0),         // 2: tunnel.v2.CloseReason
-	(DisconnectReason)(0),    // 3: tunnel.v2.DisconnectReason
-	(DomainRevokeReason)(0),  // 4: tunnel.v2.DomainRevokeReason
-	(TunnelErrorCode)(0),     // 5: tunnel.v2.TunnelErrorCode
-	(*Frame)(nil),            // 6: tunnel.v2.Frame
-	(*Hello)(nil),            // 7: tunnel.v2.Hello
-	(*Welcome)(nil),          // 8: tunnel.v2.Welcome
-	(*Ping)(nil),             // 9: tunnel.v2.Ping
-	(*Pong)(nil),             // 10: tunnel.v2.Pong
-	(*GoAway)(nil),           // 11: tunnel.v2.GoAway
-	(*TunnelError)(nil),      // 12: tunnel.v2.TunnelError
-	(*StreamOpen)(nil),       // 13: tunnel.v2.StreamOpen
-	(*StreamClose)(nil),      // 14: tunnel.v2.StreamClose
-	(*StreamReset)(nil),      // 15: tunnel.v2.StreamReset
-	(*StreamOpenResult)(nil), // 16: tunnel.v2.StreamOpenResult
-	(*BindRequest)(nil),      // 17: tunnel.v2.BindRequest
-	(*BindResult)(nil),       // 18: tunnel.v2.BindResult
-	(*UnbindRequest)(nil),    // 19: tunnel.v2.UnbindRequest
-	(*UnbindResult)(nil),     // 20: tunnel.v2.UnbindResult
-	(*DomainSync)(nil),       // 21: tunnel.v2.DomainSync
-	(*DomainBinding)(nil),    // 22: tunnel.v2.DomainBinding
-	(*DomainRevoked)(nil),    // 23: tunnel.v2.DomainRevoked
+	(ServeMode)(0),                   // 0: tunnel.v2.ServeMode
+	(DomainStatus)(0),                // 1: tunnel.v2.DomainStatus
+	(DomainVerificationStatus)(0),    // 2: tunnel.v2.DomainVerificationStatus
+	(CloseReason)(0),                 // 3: tunnel.v2.CloseReason
+	(DisconnectReason)(0),            // 4: tunnel.v2.DisconnectReason
+	(DomainRevokeReason)(0),          // 5: tunnel.v2.DomainRevokeReason
+	(TunnelErrorCode)(0),             // 6: tunnel.v2.TunnelErrorCode
+	(*Frame)(nil),                    // 7: tunnel.v2.Frame
+	(*Hello)(nil),                    // 8: tunnel.v2.Hello
+	(*Welcome)(nil),                  // 9: tunnel.v2.Welcome
+	(*Ping)(nil),                     // 10: tunnel.v2.Ping
+	(*Pong)(nil),                     // 11: tunnel.v2.Pong
+	(*GoAway)(nil),                   // 12: tunnel.v2.GoAway
+	(*TunnelError)(nil),              // 13: tunnel.v2.TunnelError
+	(*StreamOpen)(nil),               // 14: tunnel.v2.StreamOpen
+	(*StreamClose)(nil),              // 15: tunnel.v2.StreamClose
+	(*StreamReset)(nil),              // 16: tunnel.v2.StreamReset
+	(*StreamOpenResult)(nil),         // 17: tunnel.v2.StreamOpenResult
+	(*BindRequest)(nil),              // 18: tunnel.v2.BindRequest
+	(*BindResult)(nil),               // 19: tunnel.v2.BindResult
+	(*UnbindRequest)(nil),            // 20: tunnel.v2.UnbindRequest
+	(*UnbindResult)(nil),             // 21: tunnel.v2.UnbindResult
+	(*DomainSync)(nil),               // 22: tunnel.v2.DomainSync
+	(*DomainBinding)(nil),            // 23: tunnel.v2.DomainBinding
+	(*DomainRevoked)(nil),            // 24: tunnel.v2.DomainRevoked
+	(*DomainVerificationUpdate)(nil), // 25: tunnel.v2.DomainVerificationUpdate
 }
 var file_proto_tunnel_proto_depIdxs = []int32{
-	13, // 0: tunnel.v2.Frame.stream_open:type_name -> tunnel.v2.StreamOpen
-	14, // 1: tunnel.v2.Frame.stream_close:type_name -> tunnel.v2.StreamClose
-	15, // 2: tunnel.v2.Frame.stream_reset:type_name -> tunnel.v2.StreamReset
-	16, // 3: tunnel.v2.Frame.stream_open_result:type_name -> tunnel.v2.StreamOpenResult
-	7,  // 4: tunnel.v2.Frame.hello:type_name -> tunnel.v2.Hello
-	8,  // 5: tunnel.v2.Frame.welcome:type_name -> tunnel.v2.Welcome
-	9,  // 6: tunnel.v2.Frame.ping:type_name -> tunnel.v2.Ping
-	10, // 7: tunnel.v2.Frame.pong:type_name -> tunnel.v2.Pong
-	11, // 8: tunnel.v2.Frame.goaway:type_name -> tunnel.v2.GoAway
-	12, // 9: tunnel.v2.Frame.error:type_name -> tunnel.v2.TunnelError
-	17, // 10: tunnel.v2.Frame.bind_request:type_name -> tunnel.v2.BindRequest
-	18, // 11: tunnel.v2.Frame.bind_result:type_name -> tunnel.v2.BindResult
-	19, // 12: tunnel.v2.Frame.unbind_request:type_name -> tunnel.v2.UnbindRequest
-	20, // 13: tunnel.v2.Frame.unbind_result:type_name -> tunnel.v2.UnbindResult
-	21, // 14: tunnel.v2.Frame.domain_sync:type_name -> tunnel.v2.DomainSync
-	23, // 15: tunnel.v2.Frame.domain_revoked:type_name -> tunnel.v2.DomainRevoked
-	22, // 16: tunnel.v2.Welcome.authorized_domains:type_name -> tunnel.v2.DomainBinding
-	5,  // 17: tunnel.v2.GoAway.code:type_name -> tunnel.v2.TunnelErrorCode
-	3,  // 18: tunnel.v2.GoAway.reason:type_name -> tunnel.v2.DisconnectReason
-	5,  // 19: tunnel.v2.TunnelError.code:type_name -> tunnel.v2.TunnelErrorCode
-	2,  // 20: tunnel.v2.StreamClose.reason:type_name -> tunnel.v2.CloseReason
-	5,  // 21: tunnel.v2.StreamReset.code:type_name -> tunnel.v2.TunnelErrorCode
-	5,  // 22: tunnel.v2.StreamOpenResult.error_code:type_name -> tunnel.v2.TunnelErrorCode
-	0,  // 23: tunnel.v2.BindRequest.serve_mode:type_name -> tunnel.v2.ServeMode
-	5,  // 24: tunnel.v2.BindResult.error_code:type_name -> tunnel.v2.TunnelErrorCode
-	5,  // 25: tunnel.v2.UnbindResult.error_code:type_name -> tunnel.v2.TunnelErrorCode
-	22, // 26: tunnel.v2.DomainSync.domains:type_name -> tunnel.v2.DomainBinding
-	1,  // 27: tunnel.v2.DomainBinding.status:type_name -> tunnel.v2.DomainStatus
-	4,  // 28: tunnel.v2.DomainRevoked.revoke_reason:type_name -> tunnel.v2.DomainRevokeReason
-	6,  // 29: tunnel.v2.TunnelService.Tunnel:input_type -> tunnel.v2.Frame
-	6,  // 30: tunnel.v2.TunnelService.Tunnel:output_type -> tunnel.v2.Frame
-	30, // [30:31] is the sub-list for method output_type
-	29, // [29:30] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	14, // 0: tunnel.v2.Frame.stream_open:type_name -> tunnel.v2.StreamOpen
+	15, // 1: tunnel.v2.Frame.stream_close:type_name -> tunnel.v2.StreamClose
+	16, // 2: tunnel.v2.Frame.stream_reset:type_name -> tunnel.v2.StreamReset
+	17, // 3: tunnel.v2.Frame.stream_open_result:type_name -> tunnel.v2.StreamOpenResult
+	8,  // 4: tunnel.v2.Frame.hello:type_name -> tunnel.v2.Hello
+	9,  // 5: tunnel.v2.Frame.welcome:type_name -> tunnel.v2.Welcome
+	10, // 6: tunnel.v2.Frame.ping:type_name -> tunnel.v2.Ping
+	11, // 7: tunnel.v2.Frame.pong:type_name -> tunnel.v2.Pong
+	12, // 8: tunnel.v2.Frame.goaway:type_name -> tunnel.v2.GoAway
+	13, // 9: tunnel.v2.Frame.error:type_name -> tunnel.v2.TunnelError
+	18, // 10: tunnel.v2.Frame.bind_request:type_name -> tunnel.v2.BindRequest
+	19, // 11: tunnel.v2.Frame.bind_result:type_name -> tunnel.v2.BindResult
+	20, // 12: tunnel.v2.Frame.unbind_request:type_name -> tunnel.v2.UnbindRequest
+	21, // 13: tunnel.v2.Frame.unbind_result:type_name -> tunnel.v2.UnbindResult
+	22, // 14: tunnel.v2.Frame.domain_sync:type_name -> tunnel.v2.DomainSync
+	24, // 15: tunnel.v2.Frame.domain_revoked:type_name -> tunnel.v2.DomainRevoked
+	25, // 16: tunnel.v2.Frame.domain_verification_update:type_name -> tunnel.v2.DomainVerificationUpdate
+	23, // 17: tunnel.v2.Welcome.authorized_domains:type_name -> tunnel.v2.DomainBinding
+	25, // 18: tunnel.v2.Welcome.domain_verifications:type_name -> tunnel.v2.DomainVerificationUpdate
+	6,  // 19: tunnel.v2.GoAway.code:type_name -> tunnel.v2.TunnelErrorCode
+	4,  // 20: tunnel.v2.GoAway.reason:type_name -> tunnel.v2.DisconnectReason
+	6,  // 21: tunnel.v2.TunnelError.code:type_name -> tunnel.v2.TunnelErrorCode
+	3,  // 22: tunnel.v2.StreamClose.reason:type_name -> tunnel.v2.CloseReason
+	6,  // 23: tunnel.v2.StreamReset.code:type_name -> tunnel.v2.TunnelErrorCode
+	6,  // 24: tunnel.v2.StreamOpenResult.error_code:type_name -> tunnel.v2.TunnelErrorCode
+	0,  // 25: tunnel.v2.BindRequest.serve_mode:type_name -> tunnel.v2.ServeMode
+	6,  // 26: tunnel.v2.BindResult.error_code:type_name -> tunnel.v2.TunnelErrorCode
+	6,  // 27: tunnel.v2.UnbindResult.error_code:type_name -> tunnel.v2.TunnelErrorCode
+	23, // 28: tunnel.v2.DomainSync.domains:type_name -> tunnel.v2.DomainBinding
+	1,  // 29: tunnel.v2.DomainBinding.status:type_name -> tunnel.v2.DomainStatus
+	5,  // 30: tunnel.v2.DomainRevoked.revoke_reason:type_name -> tunnel.v2.DomainRevokeReason
+	2,  // 31: tunnel.v2.DomainVerificationUpdate.status:type_name -> tunnel.v2.DomainVerificationStatus
+	7,  // 32: tunnel.v2.TunnelService.Tunnel:input_type -> tunnel.v2.Frame
+	7,  // 33: tunnel.v2.TunnelService.Tunnel:output_type -> tunnel.v2.Frame
+	33, // [33:34] is the sub-list for method output_type
+	32, // [32:33] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_proto_tunnel_proto_init() }
@@ -2063,14 +2294,15 @@ func file_proto_tunnel_proto_init() {
 		(*Frame_UnbindResult)(nil),
 		(*Frame_DomainSync)(nil),
 		(*Frame_DomainRevoked)(nil),
+		(*Frame_DomainVerificationUpdate)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_tunnel_proto_rawDesc), len(file_proto_tunnel_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   18,
+			NumEnums:      7,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -92,6 +92,11 @@ func ensureCheckConstraints(ctx context.Context, db *gorm.DB) error {
 			expression: checkInExpression("status", domainStatusValues()),
 		},
 		{
+			table:      "domain_ownership_challenges",
+			name:       "domain_ownership_challenge_status_check",
+			expression: checkInExpression("status", domainOwnershipChallengeStatusValues()),
+		},
+		{
 			table:      "certificate_orders",
 			name:       "certificate_order_status_check",
 			expression: checkInExpression("status", certificateOrderStatusValues()),
@@ -102,6 +107,12 @@ func ensureCheckConstraints(ctx context.Context, db *gorm.DB) error {
 		if err := addCheckConstraint(ctx, db, check); err != nil {
 			return err
 		}
+	}
+	if err := db.WithContext(ctx).Exec(`
+UPDATE domain_ownership_challenges
+SET next_verification_at = COALESCE(last_verification_at, created_at, NOW())
+WHERE status = 'pending' AND next_verification_at IS NULL;`).Error; err != nil {
+		return fmt.Errorf("backfill DNS challenge verification schedule: %w", err)
 	}
 	return nil
 }
@@ -189,6 +200,14 @@ func domainStatusValues() []string {
 func certificateOrderStatusValues() []string {
 	values := make([]string, 0, len(allCertificateOrderStatuses))
 	for _, status := range allCertificateOrderStatuses {
+		values = append(values, string(status))
+	}
+	return values
+}
+
+func domainOwnershipChallengeStatusValues() []string {
+	values := make([]string, 0, len(allDomainOwnershipChallengeStatuses))
+	for _, status := range allDomainOwnershipChallengeStatuses {
 		values = append(values, string(status))
 	}
 	return values

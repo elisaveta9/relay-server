@@ -29,11 +29,10 @@ const (
 	defaultMaxStreamsPerDevice     = 128
 	defaultMaxFrameSizeBytes       = 8 * 1024 * 1024
 	defaultPingIntervalSeconds     = 30
-	defaultDNSChallengeTTL         = 15 * time.Minute
-	defaultDNSInstructionTTL       = 60
+	defaultDNSChallengeTTLSeconds  = 24 * 60 * 60
+	defaultDNSInstructionTTL       = 300
 	defaultMaxActiveDNSChallenges  = 32
-	defaultMaxDNSVerifyAttempts    = 10
-	defaultDNSVerifyMinInterval    = 2 * time.Second
+	defaultDNSVerifyMinInterval    = 60 * time.Second
 )
 
 func (s *ControlServiceImpl) UpdateDeviceRegistration(
@@ -53,6 +52,10 @@ func (s *ControlServiceImpl) UpdateDeviceRegistration(
 	if err != nil {
 		return nil, storageError("update device registration", err)
 	}
+	challenges, err := s.Store.ListDomainOwnershipChallengesForFingerprint(ctx, fingerprint)
+	if err != nil {
+		return nil, storageError("update device registration", err)
+	}
 
 	log.Printf("Device registration updated from mTLS identity: fingerprint=%s client_version=%s protocol_version=%d", fingerprint, req.GetClientVersion(), req.GetProtocolVersion())
 
@@ -60,8 +63,9 @@ func (s *ControlServiceImpl) UpdateDeviceRegistration(
 		Success:                 true,
 		Message:                 "ok",
 		AcceptedProtocolVersion: supportedTunnelProtocolVersion,
-		ServerFeatures:          []string{"control.v2", "tunnel.v2"},
+		ServerFeatures:          []string{"control.v2", "tunnel.v2", "domain-verification-events"},
 		Domains:                 domainInfos(domains),
+		DomainVerifications:     controlDomainVerificationInfos(challenges),
 	}, nil
 }
 
@@ -78,8 +82,15 @@ func (s *ControlServiceImpl) GetDeviceConfig(
 	if err != nil {
 		return nil, storageError("get device config", err)
 	}
+	challenges, err := s.Store.ListDomainOwnershipChallengesForFingerprint(ctx, fingerprint)
+	if err != nil {
+		return nil, storageError("get device config", err)
+	}
 
-	return deviceConfig(domainInfos(domains)), nil
+	return deviceConfig(
+		domainInfos(domains),
+		controlDomainVerificationInfos(challenges),
+	), nil
 }
 
 func (s *ControlServiceImpl) ListDomains(
@@ -95,8 +106,15 @@ func (s *ControlServiceImpl) ListDomains(
 	if err != nil {
 		return nil, storageError("list domains", err)
 	}
+	challenges, err := s.Store.ListDomainOwnershipChallengesForFingerprint(ctx, fingerprint)
+	if err != nil {
+		return nil, storageError("list domain verifications", err)
+	}
 
-	return &controlpb.ListDomainsResponse{Domains: domainInfos(domains)}, nil
+	return &controlpb.ListDomainsResponse{
+		Domains:             domainInfos(domains),
+		DomainVerifications: controlDomainVerificationInfos(challenges),
+	}, nil
 }
 
 func (s *ControlServiceImpl) UnregisterDomain(
@@ -159,7 +177,8 @@ func (s *ControlServiceImpl) RegisterDomain(
 			ctx,
 			fingerprint,
 			domain,
-			defaultDNSChallengeTTL,
+			configuredDNSChallengeTTL(),
+			configuredDNSInitialVerificationDelay(),
 			envInt("RELAY_MAX_ACTIVE_DNS_CHALLENGES_PER_DEVICE", defaultMaxActiveDNSChallenges),
 		)
 		if errors.Is(err, storage.ErrDomainAlreadyRegistered) {
@@ -178,7 +197,7 @@ func (s *ControlServiceImpl) RegisterDomain(
 		if err != nil {
 			return nil, storageError("create DNS proof challenge", err)
 		}
-		return domainRegistrationChallenge(challenge), nil
+		return domainRegistrationChallenge(challenge, configuredDNSInstructionTTL()), nil
 	}
 
 	if proof.GetType() != controlpb.ProofType_PROOF_TYPE_DNS_TXT {
@@ -196,13 +215,14 @@ func (s *ControlServiceImpl) RegisterDomain(
 		return domainRegistrationFailure("DNS proof does not match the active challenge", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_INVALID), nil
 	}
 
+	verifyMinInterval := configuredDNSVerifyMinInterval()
 	challenge, err = s.Store.BeginDomainOwnershipVerification(
 		ctx,
 		fingerprint,
 		domain,
 		challenge.RecordValue,
-		uint32(envInt("RELAY_MAX_DNS_VERIFY_ATTEMPTS_PER_CHALLENGE", defaultMaxDNSVerifyAttempts)),
-		time.Duration(envInt("RELAY_DNS_VERIFY_MIN_INTERVAL_SECONDS", int(defaultDNSVerifyMinInterval/time.Second)))*time.Second,
+		configuredMaxDNSVerifyAttempts(challenge, verifyMinInterval),
+		verifyMinInterval,
 	)
 	if errors.Is(err, storage.ErrDomainOwnershipVerificationLimit) ||
 		errors.Is(err, storage.ErrDomainOwnershipVerificationWait) {
@@ -219,7 +239,32 @@ func (s *ControlServiceImpl) RegisterDomain(
 
 	records, err := s.txtResolver().LookupTXT(ctx, absoluteDNSName(challenge.RecordName))
 	if err != nil || !containsTXTRecord(records, challenge.RecordValue) {
-		return domainRegistrationFailure("required DNS TXT record was not found", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_INVALID), nil
+		message := "required DNS TXT record was not found"
+		if err != nil {
+			message = "DNS TXT lookup failed: " + err.Error()
+		}
+		next := nextDNSVerificationAt(challenge, time.Now().UTC())
+		updated, recordErr := s.Store.RecordDomainOwnershipVerificationFailure(
+			ctx,
+			challenge.ID,
+			challenge.RecordValue,
+			message,
+			next,
+		)
+		if recordErr != nil {
+			return nil, storageError("record DNS proof verification failure", recordErr)
+		}
+		if updated {
+			challenge.LastError = message
+			challenge.NextVerificationAt = &next
+			challenge.Device.CertFingerprint = fingerprint
+			notifyDomainVerificationUpdate(s.Store, challenge, false)
+		}
+		return domainRegistrationVerificationFailure(
+			message,
+			controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DNS_PROOF_INVALID,
+			challenge,
+		), nil
 	}
 
 	registered, err := s.Store.CompleteDomainOwnershipChallenge(ctx, fingerprint, domain, challenge.RecordValue)
@@ -234,6 +279,13 @@ func (s *ControlServiceImpl) RegisterDomain(
 	if err != nil {
 		return nil, storageError("register verified domain", err)
 	}
+	now := time.Now().UTC()
+	challenge.Status = storage.DomainOwnershipChallengeStatusVerified
+	challenge.NextVerificationAt = nil
+	challenge.LastError = ""
+	challenge.VerifiedAt = &now
+	challenge.Device.CertFingerprint = fingerprint
+	notifyDomainVerificationUpdate(s.Store, challenge, true)
 	return domainRegistrationSuccess(registered), nil
 }
 
@@ -264,7 +316,20 @@ func domainRegistrationFailure(message string, code controlpb.ControlErrorCode) 
 	}
 }
 
-func domainRegistrationChallenge(challenge *storage.DomainOwnershipChallenge) *controlpb.DomainRegistrationResponse {
+func domainRegistrationVerificationFailure(
+	message string,
+	code controlpb.ControlErrorCode,
+	challenge *storage.DomainOwnershipChallenge,
+) *controlpb.DomainRegistrationResponse {
+	response := domainRegistrationFailure(message, code)
+	response.Verification = controlDomainVerificationInfo(challenge)
+	return response
+}
+
+func domainRegistrationChallenge(
+	challenge *storage.DomainOwnershipChallenge,
+	instructionTTL uint32,
+) *controlpb.DomainRegistrationResponse {
 	return &controlpb.DomainRegistrationResponse{
 		Success:   false,
 		Message:   "create the DNS TXT record and repeat RegisterDomain with the returned proof",
@@ -273,10 +338,11 @@ func domainRegistrationChallenge(challenge *storage.DomainOwnershipChallenge) *c
 			RecordName:      challenge.RecordName,
 			RecordType:      controlpb.DNSRecordType_DNS_RECORD_TYPE_TXT,
 			RecordValue:     challenge.RecordValue,
-			TtlSeconds:      defaultDNSInstructionTTL,
+			TtlSeconds:      instructionTTL,
 			Purpose:         "relay domain ownership verification",
 			ExpiresAtUnixMs: challenge.ExpiresAt.UnixMilli(),
 		},
+		Verification: controlDomainVerificationInfo(challenge),
 	}
 }
 
@@ -313,7 +379,10 @@ func containsTXTRecord(records []string, expected string) bool {
 	return false
 }
 
-func deviceConfig(domains []*controlpb.DomainInfo) *controlpb.GetDeviceConfigResponse {
+func deviceConfig(
+	domains []*controlpb.DomainInfo,
+	verifications []*controlpb.DomainVerificationInfo,
+) *controlpb.GetDeviceConfigResponse {
 	return &controlpb.GetDeviceConfigResponse{
 		MinSupportedTunnelProtocolVersion: supportedTunnelProtocolVersion,
 		MaxSupportedTunnelProtocolVersion: supportedTunnelProtocolVersion,
@@ -322,8 +391,9 @@ func deviceConfig(domains []*controlpb.DomainInfo) *controlpb.GetDeviceConfigRes
 		PolicyMaxConcurrentStreams:        uint32(envInt("RELAY_MAX_STREAMS_PER_DEVICE", defaultMaxStreamsPerDevice)),
 		PolicyMaxFrameSizeBytes:           configuredMaxFrameSizeBytes(),
 		DefaultPingIntervalSeconds:        uint32(envInt("RELAY_PING_INTERVAL_SECONDS", defaultPingIntervalSeconds)),
-		ServerFeatures:                    []string{"control.v2", "tunnel.v2"},
+		ServerFeatures:                    []string{"control.v2", "tunnel.v2", "domain-verification-events"},
 		Domains:                           domains,
+		DomainVerifications:               verifications,
 	}
 }
 
@@ -367,4 +437,47 @@ func envInt(key string, def int) int {
 		}
 	}
 	return def
+}
+
+func configuredDNSChallengeTTL() time.Duration {
+	return time.Duration(envInt("RELAY_DNS_CHALLENGE_TTL_SECONDS", defaultDNSChallengeTTLSeconds)) * time.Second
+}
+
+func configuredDNSInstructionTTL() uint32 {
+	return uint32(envInt("RELAY_DNS_INSTRUCTION_TTL_SECONDS", defaultDNSInstructionTTL))
+}
+
+func configuredDNSVerifyMinInterval() time.Duration {
+	return time.Duration(envInt(
+		"RELAY_DNS_VERIFY_MIN_INTERVAL_SECONDS",
+		int(defaultDNSVerifyMinInterval/time.Second),
+	)) * time.Second
+}
+
+func configuredMaxDNSVerifyAttempts(
+	challenge *storage.DomainOwnershipChallenge,
+	minInterval time.Duration,
+) uint32 {
+	if value := strings.TrimSpace(os.Getenv("RELAY_MAX_DNS_VERIFY_ATTEMPTS_PER_CHALLENGE")); value != "" {
+		if parsed, err := strconv.ParseUint(value, 10, 32); err == nil && parsed > 0 {
+			return uint32(parsed)
+		}
+	}
+
+	lifetime := challenge.ExpiresAt.Sub(challenge.CreatedAt)
+	if lifetime <= 0 {
+		lifetime = configuredDNSChallengeTTL()
+	}
+	if minInterval <= 0 {
+		return 1
+	}
+
+	attempts := uint64((lifetime + minInterval - 1) / minInterval)
+	if attempts < 1 {
+		return 1
+	}
+	if attempts > uint64(^uint32(0)) {
+		return ^uint32(0)
+	}
+	return uint32(attempts)
 }

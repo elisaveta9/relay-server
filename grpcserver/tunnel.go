@@ -61,16 +61,24 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 		}
 		return storageError("list domains for tunnel welcome", err)
 	}
+	challenges, err := s.Store.ListDomainOwnershipChallengesForFingerprint(stream.Context(), fingerprint)
+	if err != nil {
+		if closeErr := s.Store.CloseDeviceSession(context.Background(), session.ID); closeErr != nil {
+			log.Println("close device session after verification snapshot failed:", closeErr)
+		}
+		return storageError("list domain verifications for tunnel welcome", err)
+	}
 
 	welcomeFrame := tunnelpb.NewWelcomeFrame(&tunnelpb.Welcome{
 		SessionId:               session.ID.String(),
 		ServerTimeUnixMs:        time.Now().UnixMilli(),
 		AcceptedProtocolVersion: supportedTunnelProtocolVersion,
-		ServerFeatures:          []string{"tunnel.v2"},
+		ServerFeatures:          []string{"tunnel.v2", domainVerificationEventsFeature},
 		MaxConcurrentStreams:    limits.maxStreams,
 		MaxFrameSizeBytes:       limits.maxFrameSizeBytes,
 		PingIntervalSeconds:     limits.pingIntervalSeconds,
 		AuthorizedDomains:       tunnelDomainBindings(domains, nil),
+		DomainVerifications:     tunnelDomainVerificationUpdates(challenges),
 	})
 	if err := validateTunnelFrameSize(welcomeFrame, limits.maxFrameSizeBytes); err != nil {
 		_ = sendTunnelError(
@@ -92,6 +100,7 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 	}
 
 	dev := device.NewDeviceWithLimits(stream, fingerprint, session.ID.String(), int(limits.maxStreams), limits.maxFrameSizeBytes)
+	dev.SetSupportedFeatures(hello.GetSupportedFeatures())
 	registry.Global.RegisterDevice(dev)
 	log.Printf(
 		"tunnel stream opened: fingerprint=%s session=%s client_version=%q protocol_version=%d max_streams=%d max_frame_size_bytes=%d ping_interval_seconds=%d",
@@ -315,6 +324,7 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 			*tunnelpb.Frame_UnbindResult,
 			*tunnelpb.Frame_DomainSync,
 			*tunnelpb.Frame_DomainRevoked,
+			*tunnelpb.Frame_DomainVerificationUpdate,
 			*tunnelpb.Frame_Pong:
 			return rejectDeviceProtocolViolation(
 				dev,

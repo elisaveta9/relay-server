@@ -76,6 +76,58 @@ func (DomainStatus) EnumDescriptor() ([]byte, []int) {
 	return file_proto_control_proto_rawDescGZIP(), []int{0}
 }
 
+type DomainVerificationStatus int32
+
+const (
+	DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_UNSPECIFIED DomainVerificationStatus = 0
+	DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_PENDING     DomainVerificationStatus = 1
+	DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_VERIFIED    DomainVerificationStatus = 2
+	DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_EXPIRED     DomainVerificationStatus = 3
+)
+
+// Enum value maps for DomainVerificationStatus.
+var (
+	DomainVerificationStatus_name = map[int32]string{
+		0: "DOMAIN_VERIFICATION_STATUS_UNSPECIFIED",
+		1: "DOMAIN_VERIFICATION_STATUS_PENDING",
+		2: "DOMAIN_VERIFICATION_STATUS_VERIFIED",
+		3: "DOMAIN_VERIFICATION_STATUS_EXPIRED",
+	}
+	DomainVerificationStatus_value = map[string]int32{
+		"DOMAIN_VERIFICATION_STATUS_UNSPECIFIED": 0,
+		"DOMAIN_VERIFICATION_STATUS_PENDING":     1,
+		"DOMAIN_VERIFICATION_STATUS_VERIFIED":    2,
+		"DOMAIN_VERIFICATION_STATUS_EXPIRED":     3,
+	}
+)
+
+func (x DomainVerificationStatus) Enum() *DomainVerificationStatus {
+	p := new(DomainVerificationStatus)
+	*p = x
+	return p
+}
+
+func (x DomainVerificationStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DomainVerificationStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_control_proto_enumTypes[1].Descriptor()
+}
+
+func (DomainVerificationStatus) Type() protoreflect.EnumType {
+	return &file_proto_control_proto_enumTypes[1]
+}
+
+func (x DomainVerificationStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DomainVerificationStatus.Descriptor instead.
+func (DomainVerificationStatus) EnumDescriptor() ([]byte, []int) {
+	return file_proto_control_proto_rawDescGZIP(), []int{1}
+}
+
 type ProofType int32
 
 const (
@@ -106,11 +158,11 @@ func (x ProofType) String() string {
 }
 
 func (ProofType) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_control_proto_enumTypes[1].Descriptor()
+	return file_proto_control_proto_enumTypes[2].Descriptor()
 }
 
 func (ProofType) Type() protoreflect.EnumType {
-	return &file_proto_control_proto_enumTypes[1]
+	return &file_proto_control_proto_enumTypes[2]
 }
 
 func (x ProofType) Number() protoreflect.EnumNumber {
@@ -119,7 +171,7 @@ func (x ProofType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProofType.Descriptor instead.
 func (ProofType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{1}
+	return file_proto_control_proto_rawDescGZIP(), []int{2}
 }
 
 type DNSRecordType int32
@@ -155,11 +207,11 @@ func (x DNSRecordType) String() string {
 }
 
 func (DNSRecordType) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_control_proto_enumTypes[2].Descriptor()
+	return file_proto_control_proto_enumTypes[3].Descriptor()
 }
 
 func (DNSRecordType) Type() protoreflect.EnumType {
-	return &file_proto_control_proto_enumTypes[2]
+	return &file_proto_control_proto_enumTypes[3]
 }
 
 func (x DNSRecordType) Number() protoreflect.EnumNumber {
@@ -168,7 +220,7 @@ func (x DNSRecordType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DNSRecordType.Descriptor instead.
 func (DNSRecordType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{2}
+	return file_proto_control_proto_rawDescGZIP(), []int{3}
 }
 
 type ControlErrorCode int32
@@ -228,11 +280,11 @@ func (x ControlErrorCode) String() string {
 }
 
 func (ControlErrorCode) Descriptor() protoreflect.EnumDescriptor {
-	return file_proto_control_proto_enumTypes[3].Descriptor()
+	return file_proto_control_proto_enumTypes[4].Descriptor()
 }
 
 func (ControlErrorCode) Type() protoreflect.EnumType {
-	return &file_proto_control_proto_enumTypes[3]
+	return &file_proto_control_proto_enumTypes[4]
 }
 
 func (x ControlErrorCode) Number() protoreflect.EnumNumber {
@@ -241,7 +293,7 @@ func (x ControlErrorCode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ControlErrorCode.Descriptor instead.
 func (ControlErrorCode) EnumDescriptor() ([]byte, []int) {
-	return file_proto_control_proto_rawDescGZIP(), []int{3}
+	return file_proto_control_proto_rawDescGZIP(), []int{4}
 }
 
 type UpdateDeviceRegistrationRequest struct {
@@ -313,12 +365,13 @@ func (x *UpdateDeviceRegistrationRequest) GetClientReportedInstallId() string {
 }
 
 type UpdateDeviceRegistrationResponse struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Success                 bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message                 string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	AcceptedProtocolVersion uint32                 `protobuf:"varint,3,opt,name=accepted_protocol_version,json=acceptedProtocolVersion,proto3" json:"accepted_protocol_version,omitempty"`
-	ServerFeatures          []string               `protobuf:"bytes,4,rep,name=server_features,json=serverFeatures,proto3" json:"server_features,omitempty"`
-	Domains                 []*DomainInfo          `protobuf:"bytes,10,rep,name=domains,proto3" json:"domains,omitempty"`
+	state                   protoimpl.MessageState    `protogen:"open.v1"`
+	Success                 bool                      `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message                 string                    `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	AcceptedProtocolVersion uint32                    `protobuf:"varint,3,opt,name=accepted_protocol_version,json=acceptedProtocolVersion,proto3" json:"accepted_protocol_version,omitempty"`
+	ServerFeatures          []string                  `protobuf:"bytes,4,rep,name=server_features,json=serverFeatures,proto3" json:"server_features,omitempty"`
+	Domains                 []*DomainInfo             `protobuf:"bytes,10,rep,name=domains,proto3" json:"domains,omitempty"`
+	DomainVerifications     []*DomainVerificationInfo `protobuf:"bytes,11,rep,name=domain_verifications,json=domainVerifications,proto3" json:"domain_verifications,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -388,6 +441,13 @@ func (x *UpdateDeviceRegistrationResponse) GetDomains() []*DomainInfo {
 	return nil
 }
 
+func (x *UpdateDeviceRegistrationResponse) GetDomainVerifications() []*DomainVerificationInfo {
+	if x != nil {
+		return x.DomainVerifications
+	}
+	return nil
+}
+
 type GetDeviceConfigRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -425,16 +485,17 @@ func (*GetDeviceConfigRequest) Descriptor() ([]byte, []int) {
 }
 
 type GetDeviceConfigResponse struct {
-	state                             protoimpl.MessageState `protogen:"open.v1"`
-	MinSupportedTunnelProtocolVersion uint32                 `protobuf:"varint,1,opt,name=min_supported_tunnel_protocol_version,json=minSupportedTunnelProtocolVersion,proto3" json:"min_supported_tunnel_protocol_version,omitempty"`
-	MaxSupportedTunnelProtocolVersion uint32                 `protobuf:"varint,2,opt,name=max_supported_tunnel_protocol_version,json=maxSupportedTunnelProtocolVersion,proto3" json:"max_supported_tunnel_protocol_version,omitempty"`
-	PreferredTunnelProtocolVersion    uint32                 `protobuf:"varint,3,opt,name=preferred_tunnel_protocol_version,json=preferredTunnelProtocolVersion,proto3" json:"preferred_tunnel_protocol_version,omitempty"`
-	RelayGrpcEndpoint                 string                 `protobuf:"bytes,10,opt,name=relay_grpc_endpoint,json=relayGrpcEndpoint,proto3" json:"relay_grpc_endpoint,omitempty"`
-	PolicyMaxConcurrentStreams        uint32                 `protobuf:"varint,20,opt,name=policy_max_concurrent_streams,json=policyMaxConcurrentStreams,proto3" json:"policy_max_concurrent_streams,omitempty"`
-	PolicyMaxFrameSizeBytes           uint32                 `protobuf:"varint,21,opt,name=policy_max_frame_size_bytes,json=policyMaxFrameSizeBytes,proto3" json:"policy_max_frame_size_bytes,omitempty"`
-	DefaultPingIntervalSeconds        uint32                 `protobuf:"varint,22,opt,name=default_ping_interval_seconds,json=defaultPingIntervalSeconds,proto3" json:"default_ping_interval_seconds,omitempty"`
-	ServerFeatures                    []string               `protobuf:"bytes,30,rep,name=server_features,json=serverFeatures,proto3" json:"server_features,omitempty"`
-	Domains                           []*DomainInfo          `protobuf:"bytes,40,rep,name=domains,proto3" json:"domains,omitempty"`
+	state                             protoimpl.MessageState    `protogen:"open.v1"`
+	MinSupportedTunnelProtocolVersion uint32                    `protobuf:"varint,1,opt,name=min_supported_tunnel_protocol_version,json=minSupportedTunnelProtocolVersion,proto3" json:"min_supported_tunnel_protocol_version,omitempty"`
+	MaxSupportedTunnelProtocolVersion uint32                    `protobuf:"varint,2,opt,name=max_supported_tunnel_protocol_version,json=maxSupportedTunnelProtocolVersion,proto3" json:"max_supported_tunnel_protocol_version,omitempty"`
+	PreferredTunnelProtocolVersion    uint32                    `protobuf:"varint,3,opt,name=preferred_tunnel_protocol_version,json=preferredTunnelProtocolVersion,proto3" json:"preferred_tunnel_protocol_version,omitempty"`
+	RelayGrpcEndpoint                 string                    `protobuf:"bytes,10,opt,name=relay_grpc_endpoint,json=relayGrpcEndpoint,proto3" json:"relay_grpc_endpoint,omitempty"`
+	PolicyMaxConcurrentStreams        uint32                    `protobuf:"varint,20,opt,name=policy_max_concurrent_streams,json=policyMaxConcurrentStreams,proto3" json:"policy_max_concurrent_streams,omitempty"`
+	PolicyMaxFrameSizeBytes           uint32                    `protobuf:"varint,21,opt,name=policy_max_frame_size_bytes,json=policyMaxFrameSizeBytes,proto3" json:"policy_max_frame_size_bytes,omitempty"`
+	DefaultPingIntervalSeconds        uint32                    `protobuf:"varint,22,opt,name=default_ping_interval_seconds,json=defaultPingIntervalSeconds,proto3" json:"default_ping_interval_seconds,omitempty"`
+	ServerFeatures                    []string                  `protobuf:"bytes,30,rep,name=server_features,json=serverFeatures,proto3" json:"server_features,omitempty"`
+	Domains                           []*DomainInfo             `protobuf:"bytes,40,rep,name=domains,proto3" json:"domains,omitempty"`
+	DomainVerifications               []*DomainVerificationInfo `protobuf:"bytes,41,rep,name=domain_verifications,json=domainVerifications,proto3" json:"domain_verifications,omitempty"`
 	unknownFields                     protoimpl.UnknownFields
 	sizeCache                         protoimpl.SizeCache
 }
@@ -532,6 +593,13 @@ func (x *GetDeviceConfigResponse) GetDomains() []*DomainInfo {
 	return nil
 }
 
+func (x *GetDeviceConfigResponse) GetDomainVerifications() []*DomainVerificationInfo {
+	if x != nil {
+		return x.DomainVerifications
+	}
+	return nil
+}
+
 type ListDomainsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -569,10 +637,11 @@ func (*ListDomainsRequest) Descriptor() ([]byte, []int) {
 }
 
 type ListDomainsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Domains       []*DomainInfo          `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState    `protogen:"open.v1"`
+	Domains             []*DomainInfo             `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
+	DomainVerifications []*DomainVerificationInfo `protobuf:"bytes,2,rep,name=domain_verifications,json=domainVerifications,proto3" json:"domain_verifications,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ListDomainsResponse) Reset() {
@@ -608,6 +677,13 @@ func (*ListDomainsResponse) Descriptor() ([]byte, []int) {
 func (x *ListDomainsResponse) GetDomains() []*DomainInfo {
 	if x != nil {
 		return x.Domains
+	}
+	return nil
+}
+
+func (x *ListDomainsResponse) GetDomainVerifications() []*DomainVerificationInfo {
+	if x != nil {
+		return x.DomainVerifications
 	}
 	return nil
 }
@@ -717,11 +793,9 @@ func (x *UnregisterDomainResponse) GetErrorCode() ControlErrorCode {
 }
 
 type RegisterDomainRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Domain string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
-	// Relay-specific proof that authorizes SNI routing for this domain.
-	// It is not an ACME challenge and is not used to issue certificates.
-	Proof         *DomainOwnershipProof `protobuf:"bytes,2,opt,name=proof,proto3" json:"proof,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Proof         *DomainOwnershipProof  `protobuf:"bytes,2,opt,name=proof,proto3" json:"proof,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -831,12 +905,13 @@ func (x *DomainOwnershipProof) GetRecordValue() string {
 }
 
 type DomainRegistrationResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Success        bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message        string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	ErrorCode      ControlErrorCode       `protobuf:"varint,3,opt,name=error_code,json=errorCode,proto3,enum=control.v2.ControlErrorCode" json:"error_code,omitempty"`
-	Domain         *DomainInfo            `protobuf:"bytes,10,opt,name=domain,proto3" json:"domain,omitempty"`
-	DnsInstruction *DNSInstruction        `protobuf:"bytes,11,opt,name=dns_instruction,json=dnsInstruction,proto3" json:"dns_instruction,omitempty"`
+	state          protoimpl.MessageState  `protogen:"open.v1"`
+	Success        bool                    `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message        string                  `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	ErrorCode      ControlErrorCode        `protobuf:"varint,3,opt,name=error_code,json=errorCode,proto3,enum=control.v2.ControlErrorCode" json:"error_code,omitempty"`
+	Domain         *DomainInfo             `protobuf:"bytes,10,opt,name=domain,proto3" json:"domain,omitempty"`
+	DnsInstruction *DNSInstruction         `protobuf:"bytes,11,opt,name=dns_instruction,json=dnsInstruction,proto3" json:"dns_instruction,omitempty"`
+	Verification   *DomainVerificationInfo `protobuf:"bytes,12,opt,name=verification,proto3" json:"verification,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -902,6 +977,13 @@ func (x *DomainRegistrationResponse) GetDomain() *DomainInfo {
 func (x *DomainRegistrationResponse) GetDnsInstruction() *DNSInstruction {
 	if x != nil {
 		return x.DnsInstruction
+	}
+	return nil
+}
+
+func (x *DomainRegistrationResponse) GetVerification() *DomainVerificationInfo {
+	if x != nil {
+		return x.Verification
 	}
 	return nil
 }
@@ -1066,6 +1148,114 @@ func (x *DomainInfo) GetUpdatedAtUnixMs() int64 {
 	return 0
 }
 
+type DomainVerificationInfo struct {
+	state                    protoimpl.MessageState   `protogen:"open.v1"`
+	Domain                   string                   `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Status                   DomainVerificationStatus `protobuf:"varint,2,opt,name=status,proto3,enum=control.v2.DomainVerificationStatus" json:"status,omitempty"`
+	DnsInstruction           *DNSInstruction          `protobuf:"bytes,3,opt,name=dns_instruction,json=dnsInstruction,proto3" json:"dns_instruction,omitempty"`
+	VerificationAttempts     uint32                   `protobuf:"varint,4,opt,name=verification_attempts,json=verificationAttempts,proto3" json:"verification_attempts,omitempty"`
+	NextVerificationAtUnixMs int64                    `protobuf:"varint,5,opt,name=next_verification_at_unix_ms,json=nextVerificationAtUnixMs,proto3" json:"next_verification_at_unix_ms,omitempty"`
+	LastVerificationAtUnixMs int64                    `protobuf:"varint,6,opt,name=last_verification_at_unix_ms,json=lastVerificationAtUnixMs,proto3" json:"last_verification_at_unix_ms,omitempty"`
+	LastError                string                   `protobuf:"bytes,7,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	VerifiedAtUnixMs         int64                    `protobuf:"varint,8,opt,name=verified_at_unix_ms,json=verifiedAtUnixMs,proto3" json:"verified_at_unix_ms,omitempty"`
+	CanRequestNewChallenge   bool                     `protobuf:"varint,9,opt,name=can_request_new_challenge,json=canRequestNewChallenge,proto3" json:"can_request_new_challenge,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *DomainVerificationInfo) Reset() {
+	*x = DomainVerificationInfo{}
+	mi := &file_proto_control_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DomainVerificationInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DomainVerificationInfo) ProtoMessage() {}
+
+func (x *DomainVerificationInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_control_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DomainVerificationInfo.ProtoReflect.Descriptor instead.
+func (*DomainVerificationInfo) Descriptor() ([]byte, []int) {
+	return file_proto_control_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *DomainVerificationInfo) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *DomainVerificationInfo) GetStatus() DomainVerificationStatus {
+	if x != nil {
+		return x.Status
+	}
+	return DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_UNSPECIFIED
+}
+
+func (x *DomainVerificationInfo) GetDnsInstruction() *DNSInstruction {
+	if x != nil {
+		return x.DnsInstruction
+	}
+	return nil
+}
+
+func (x *DomainVerificationInfo) GetVerificationAttempts() uint32 {
+	if x != nil {
+		return x.VerificationAttempts
+	}
+	return 0
+}
+
+func (x *DomainVerificationInfo) GetNextVerificationAtUnixMs() int64 {
+	if x != nil {
+		return x.NextVerificationAtUnixMs
+	}
+	return 0
+}
+
+func (x *DomainVerificationInfo) GetLastVerificationAtUnixMs() int64 {
+	if x != nil {
+		return x.LastVerificationAtUnixMs
+	}
+	return 0
+}
+
+func (x *DomainVerificationInfo) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *DomainVerificationInfo) GetVerifiedAtUnixMs() int64 {
+	if x != nil {
+		return x.VerifiedAtUnixMs
+	}
+	return 0
+}
+
+func (x *DomainVerificationInfo) GetCanRequestNewChallenge() bool {
+	if x != nil {
+		return x.CanRequestNewChallenge
+	}
+	return false
+}
+
 var File_proto_control_proto protoreflect.FileDescriptor
 
 const file_proto_control_proto_rawDesc = "" +
@@ -1076,15 +1266,16 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12%\n" +
 	"\x0eclient_version\x18\x02 \x01(\tR\rclientVersion\x12-\n" +
 	"\x12supported_features\x18\x03 \x03(\tR\x11supportedFeatures\x12;\n" +
-	"\x1aclient_reported_install_id\x18\x04 \x01(\tR\x17clientReportedInstallIdJ\x04\b\x05\x10\x06R\vdevice_info\"\xed\x01\n" +
+	"\x1aclient_reported_install_id\x18\x04 \x01(\tR\x17clientReportedInstallIdJ\x04\b\x05\x10\x06R\vdevice_info\"\xc4\x02\n" +
 	" UpdateDeviceRegistrationResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12:\n" +
 	"\x19accepted_protocol_version\x18\x03 \x01(\rR\x17acceptedProtocolVersion\x12'\n" +
 	"\x0fserver_features\x18\x04 \x03(\tR\x0eserverFeatures\x120\n" +
 	"\adomains\x18\n" +
-	" \x03(\v2\x16.control.v2.DomainInfoR\adomains\"\x18\n" +
-	"\x16GetDeviceConfigRequest\"\xa1\x05\n" +
+	" \x03(\v2\x16.control.v2.DomainInfoR\adomains\x12U\n" +
+	"\x14domain_verifications\x18\v \x03(\v2\".control.v2.DomainVerificationInfoR\x13domainVerifications\"\x18\n" +
+	"\x16GetDeviceConfigRequest\"\xf8\x05\n" +
 	"\x17GetDeviceConfigResponse\x12P\n" +
 	"%min_supported_tunnel_protocol_version\x18\x01 \x01(\rR!minSupportedTunnelProtocolVersion\x12P\n" +
 	"%max_supported_tunnel_protocol_version\x18\x02 \x01(\rR!maxSupportedTunnelProtocolVersion\x12I\n" +
@@ -1095,10 +1286,12 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x1bpolicy_max_frame_size_bytes\x18\x15 \x01(\rR\x17policyMaxFrameSizeBytes\x12A\n" +
 	"\x1ddefault_ping_interval_seconds\x18\x16 \x01(\rR\x1adefaultPingIntervalSeconds\x12'\n" +
 	"\x0fserver_features\x18\x1e \x03(\tR\x0eserverFeatures\x120\n" +
-	"\adomains\x18( \x03(\v2\x16.control.v2.DomainInfoR\adomainsJ\x04\b\v\x10\fJ\x04\b2\x103J\x04\b3\x104R\x0eadmin_endpointR\x0fmanaged_zone_idR\x15managed_domain_suffix\"\x14\n" +
-	"\x12ListDomainsRequest\"G\n" +
+	"\adomains\x18( \x03(\v2\x16.control.v2.DomainInfoR\adomains\x12U\n" +
+	"\x14domain_verifications\x18) \x03(\v2\".control.v2.DomainVerificationInfoR\x13domainVerificationsJ\x04\b\v\x10\fJ\x04\b2\x103J\x04\b3\x104R\x0eadmin_endpointR\x0fmanaged_zone_idR\x15managed_domain_suffix\"\x14\n" +
+	"\x12ListDomainsRequest\"\x9e\x01\n" +
 	"\x13ListDomainsResponse\x120\n" +
-	"\adomains\x18\x01 \x03(\v2\x16.control.v2.DomainInfoR\adomains\"1\n" +
+	"\adomains\x18\x01 \x03(\v2\x16.control.v2.DomainInfoR\adomains\x12U\n" +
+	"\x14domain_verifications\x18\x02 \x03(\v2\".control.v2.DomainVerificationInfoR\x13domainVerifications\"1\n" +
 	"\x17UnregisterDomainRequest\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\"\x8b\x01\n" +
 	"\x18UnregisterDomainResponse\x12\x18\n" +
@@ -1113,7 +1306,7 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\x0e2\x15.control.v2.ProofTypeR\x04type\x12\x1f\n" +
 	"\vrecord_name\x18\x02 \x01(\tR\n" +
 	"recordName\x12!\n" +
-	"\frecord_value\x18\x03 \x01(\tR\vrecordValue\"\x82\x02\n" +
+	"\frecord_value\x18\x03 \x01(\tR\vrecordValue\"\xca\x02\n" +
 	"\x1aDomainRegistrationResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12;\n" +
@@ -1121,7 +1314,8 @@ const file_proto_control_proto_rawDesc = "" +
 	"error_code\x18\x03 \x01(\x0e2\x1c.control.v2.ControlErrorCodeR\terrorCode\x12.\n" +
 	"\x06domain\x18\n" +
 	" \x01(\v2\x16.control.v2.DomainInfoR\x06domain\x12C\n" +
-	"\x0fdns_instruction\x18\v \x01(\v2\x1a.control.v2.DNSInstructionR\x0ednsInstruction\"\xf8\x01\n" +
+	"\x0fdns_instruction\x18\v \x01(\v2\x1a.control.v2.DNSInstructionR\x0ednsInstruction\x12F\n" +
+	"\fverification\x18\f \x01(\v2\".control.v2.DomainVerificationInfoR\fverification\"\xf8\x01\n" +
 	"\x0eDNSInstruction\x12\x1f\n" +
 	"\vrecord_name\x18\x01 \x01(\tR\n" +
 	"recordName\x12:\n" +
@@ -1138,13 +1332,29 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\x0e2\x18.control.v2.DomainStatusR\x06status\x12%\n" +
 	"\x0eactive_binding\x18\x04 \x01(\bR\ractiveBinding\x12+\n" +
 	"\x12created_at_unix_ms\x18\x05 \x01(\x03R\x0fcreatedAtUnixMs\x12+\n" +
-	"\x12updated_at_unix_ms\x18\x06 \x01(\x03R\x0fupdatedAtUnixMsJ\x04\b\x03\x10\x04R\x12relay_managed_zone*\xa1\x01\n" +
+	"\x12updated_at_unix_ms\x18\x06 \x01(\x03R\x0fupdatedAtUnixMsJ\x04\b\x03\x10\x04R\x12relay_managed_zone\"\xf1\x03\n" +
+	"\x16DomainVerificationInfo\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\x12<\n" +
+	"\x06status\x18\x02 \x01(\x0e2$.control.v2.DomainVerificationStatusR\x06status\x12C\n" +
+	"\x0fdns_instruction\x18\x03 \x01(\v2\x1a.control.v2.DNSInstructionR\x0ednsInstruction\x123\n" +
+	"\x15verification_attempts\x18\x04 \x01(\rR\x14verificationAttempts\x12>\n" +
+	"\x1cnext_verification_at_unix_ms\x18\x05 \x01(\x03R\x18nextVerificationAtUnixMs\x12>\n" +
+	"\x1clast_verification_at_unix_ms\x18\x06 \x01(\x03R\x18lastVerificationAtUnixMs\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\a \x01(\tR\tlastError\x12-\n" +
+	"\x13verified_at_unix_ms\x18\b \x01(\x03R\x10verifiedAtUnixMs\x129\n" +
+	"\x19can_request_new_challenge\x18\t \x01(\bR\x16canRequestNewChallenge*\xa1\x01\n" +
 	"\fDomainStatus\x12\x1d\n" +
 	"\x19DOMAIN_STATUS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19DOMAIN_STATUS_PENDING_DNS\x10\x01\x12\x1c\n" +
 	"\x18DOMAIN_STATUS_REGISTERED\x10\x02\x12\x1a\n" +
 	"\x16DOMAIN_STATUS_DISABLED\x10\x03\x12\x19\n" +
-	"\x15DOMAIN_STATUS_REVOKED\x10\x04*?\n" +
+	"\x15DOMAIN_STATUS_REVOKED\x10\x04*\xbf\x01\n" +
+	"\x18DomainVerificationStatus\x12*\n" +
+	"&DOMAIN_VERIFICATION_STATUS_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"DOMAIN_VERIFICATION_STATUS_PENDING\x10\x01\x12'\n" +
+	"#DOMAIN_VERIFICATION_STATUS_VERIFIED\x10\x02\x12&\n" +
+	"\"DOMAIN_VERIFICATION_STATUS_EXPIRED\x10\x03*?\n" +
 	"\tProofType\x12\x1a\n" +
 	"\x16PROOF_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12PROOF_TYPE_DNS_TXT\x10\x01*d\n" +
@@ -1185,54 +1395,62 @@ func file_proto_control_proto_rawDescGZIP() []byte {
 	return file_proto_control_proto_rawDescData
 }
 
-var file_proto_control_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_proto_control_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_proto_control_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_proto_control_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_proto_control_proto_goTypes = []any{
 	(DomainStatus)(0),                        // 0: control.v2.DomainStatus
-	(ProofType)(0),                           // 1: control.v2.ProofType
-	(DNSRecordType)(0),                       // 2: control.v2.DNSRecordType
-	(ControlErrorCode)(0),                    // 3: control.v2.ControlErrorCode
-	(*UpdateDeviceRegistrationRequest)(nil),  // 4: control.v2.UpdateDeviceRegistrationRequest
-	(*UpdateDeviceRegistrationResponse)(nil), // 5: control.v2.UpdateDeviceRegistrationResponse
-	(*GetDeviceConfigRequest)(nil),           // 6: control.v2.GetDeviceConfigRequest
-	(*GetDeviceConfigResponse)(nil),          // 7: control.v2.GetDeviceConfigResponse
-	(*ListDomainsRequest)(nil),               // 8: control.v2.ListDomainsRequest
-	(*ListDomainsResponse)(nil),              // 9: control.v2.ListDomainsResponse
-	(*UnregisterDomainRequest)(nil),          // 10: control.v2.UnregisterDomainRequest
-	(*UnregisterDomainResponse)(nil),         // 11: control.v2.UnregisterDomainResponse
-	(*RegisterDomainRequest)(nil),            // 12: control.v2.RegisterDomainRequest
-	(*DomainOwnershipProof)(nil),             // 13: control.v2.DomainOwnershipProof
-	(*DomainRegistrationResponse)(nil),       // 14: control.v2.DomainRegistrationResponse
-	(*DNSInstruction)(nil),                   // 15: control.v2.DNSInstruction
-	(*DomainInfo)(nil),                       // 16: control.v2.DomainInfo
+	(DomainVerificationStatus)(0),            // 1: control.v2.DomainVerificationStatus
+	(ProofType)(0),                           // 2: control.v2.ProofType
+	(DNSRecordType)(0),                       // 3: control.v2.DNSRecordType
+	(ControlErrorCode)(0),                    // 4: control.v2.ControlErrorCode
+	(*UpdateDeviceRegistrationRequest)(nil),  // 5: control.v2.UpdateDeviceRegistrationRequest
+	(*UpdateDeviceRegistrationResponse)(nil), // 6: control.v2.UpdateDeviceRegistrationResponse
+	(*GetDeviceConfigRequest)(nil),           // 7: control.v2.GetDeviceConfigRequest
+	(*GetDeviceConfigResponse)(nil),          // 8: control.v2.GetDeviceConfigResponse
+	(*ListDomainsRequest)(nil),               // 9: control.v2.ListDomainsRequest
+	(*ListDomainsResponse)(nil),              // 10: control.v2.ListDomainsResponse
+	(*UnregisterDomainRequest)(nil),          // 11: control.v2.UnregisterDomainRequest
+	(*UnregisterDomainResponse)(nil),         // 12: control.v2.UnregisterDomainResponse
+	(*RegisterDomainRequest)(nil),            // 13: control.v2.RegisterDomainRequest
+	(*DomainOwnershipProof)(nil),             // 14: control.v2.DomainOwnershipProof
+	(*DomainRegistrationResponse)(nil),       // 15: control.v2.DomainRegistrationResponse
+	(*DNSInstruction)(nil),                   // 16: control.v2.DNSInstruction
+	(*DomainInfo)(nil),                       // 17: control.v2.DomainInfo
+	(*DomainVerificationInfo)(nil),           // 18: control.v2.DomainVerificationInfo
 }
 var file_proto_control_proto_depIdxs = []int32{
-	16, // 0: control.v2.UpdateDeviceRegistrationResponse.domains:type_name -> control.v2.DomainInfo
-	16, // 1: control.v2.GetDeviceConfigResponse.domains:type_name -> control.v2.DomainInfo
-	16, // 2: control.v2.ListDomainsResponse.domains:type_name -> control.v2.DomainInfo
-	3,  // 3: control.v2.UnregisterDomainResponse.error_code:type_name -> control.v2.ControlErrorCode
-	13, // 4: control.v2.RegisterDomainRequest.proof:type_name -> control.v2.DomainOwnershipProof
-	1,  // 5: control.v2.DomainOwnershipProof.type:type_name -> control.v2.ProofType
-	3,  // 6: control.v2.DomainRegistrationResponse.error_code:type_name -> control.v2.ControlErrorCode
-	16, // 7: control.v2.DomainRegistrationResponse.domain:type_name -> control.v2.DomainInfo
-	15, // 8: control.v2.DomainRegistrationResponse.dns_instruction:type_name -> control.v2.DNSInstruction
-	2,  // 9: control.v2.DNSInstruction.record_type:type_name -> control.v2.DNSRecordType
-	0,  // 10: control.v2.DomainInfo.status:type_name -> control.v2.DomainStatus
-	4,  // 11: control.v2.ControlService.UpdateDeviceRegistration:input_type -> control.v2.UpdateDeviceRegistrationRequest
-	6,  // 12: control.v2.ControlService.GetDeviceConfig:input_type -> control.v2.GetDeviceConfigRequest
-	8,  // 13: control.v2.ControlService.ListDomains:input_type -> control.v2.ListDomainsRequest
-	10, // 14: control.v2.ControlService.UnregisterDomain:input_type -> control.v2.UnregisterDomainRequest
-	12, // 15: control.v2.ControlService.RegisterDomain:input_type -> control.v2.RegisterDomainRequest
-	5,  // 16: control.v2.ControlService.UpdateDeviceRegistration:output_type -> control.v2.UpdateDeviceRegistrationResponse
-	7,  // 17: control.v2.ControlService.GetDeviceConfig:output_type -> control.v2.GetDeviceConfigResponse
-	9,  // 18: control.v2.ControlService.ListDomains:output_type -> control.v2.ListDomainsResponse
-	11, // 19: control.v2.ControlService.UnregisterDomain:output_type -> control.v2.UnregisterDomainResponse
-	14, // 20: control.v2.ControlService.RegisterDomain:output_type -> control.v2.DomainRegistrationResponse
-	16, // [16:21] is the sub-list for method output_type
-	11, // [11:16] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	17, // 0: control.v2.UpdateDeviceRegistrationResponse.domains:type_name -> control.v2.DomainInfo
+	18, // 1: control.v2.UpdateDeviceRegistrationResponse.domain_verifications:type_name -> control.v2.DomainVerificationInfo
+	17, // 2: control.v2.GetDeviceConfigResponse.domains:type_name -> control.v2.DomainInfo
+	18, // 3: control.v2.GetDeviceConfigResponse.domain_verifications:type_name -> control.v2.DomainVerificationInfo
+	17, // 4: control.v2.ListDomainsResponse.domains:type_name -> control.v2.DomainInfo
+	18, // 5: control.v2.ListDomainsResponse.domain_verifications:type_name -> control.v2.DomainVerificationInfo
+	4,  // 6: control.v2.UnregisterDomainResponse.error_code:type_name -> control.v2.ControlErrorCode
+	14, // 7: control.v2.RegisterDomainRequest.proof:type_name -> control.v2.DomainOwnershipProof
+	2,  // 8: control.v2.DomainOwnershipProof.type:type_name -> control.v2.ProofType
+	4,  // 9: control.v2.DomainRegistrationResponse.error_code:type_name -> control.v2.ControlErrorCode
+	17, // 10: control.v2.DomainRegistrationResponse.domain:type_name -> control.v2.DomainInfo
+	16, // 11: control.v2.DomainRegistrationResponse.dns_instruction:type_name -> control.v2.DNSInstruction
+	18, // 12: control.v2.DomainRegistrationResponse.verification:type_name -> control.v2.DomainVerificationInfo
+	3,  // 13: control.v2.DNSInstruction.record_type:type_name -> control.v2.DNSRecordType
+	0,  // 14: control.v2.DomainInfo.status:type_name -> control.v2.DomainStatus
+	1,  // 15: control.v2.DomainVerificationInfo.status:type_name -> control.v2.DomainVerificationStatus
+	16, // 16: control.v2.DomainVerificationInfo.dns_instruction:type_name -> control.v2.DNSInstruction
+	5,  // 17: control.v2.ControlService.UpdateDeviceRegistration:input_type -> control.v2.UpdateDeviceRegistrationRequest
+	7,  // 18: control.v2.ControlService.GetDeviceConfig:input_type -> control.v2.GetDeviceConfigRequest
+	9,  // 19: control.v2.ControlService.ListDomains:input_type -> control.v2.ListDomainsRequest
+	11, // 20: control.v2.ControlService.UnregisterDomain:input_type -> control.v2.UnregisterDomainRequest
+	13, // 21: control.v2.ControlService.RegisterDomain:input_type -> control.v2.RegisterDomainRequest
+	6,  // 22: control.v2.ControlService.UpdateDeviceRegistration:output_type -> control.v2.UpdateDeviceRegistrationResponse
+	8,  // 23: control.v2.ControlService.GetDeviceConfig:output_type -> control.v2.GetDeviceConfigResponse
+	10, // 24: control.v2.ControlService.ListDomains:output_type -> control.v2.ListDomainsResponse
+	12, // 25: control.v2.ControlService.UnregisterDomain:output_type -> control.v2.UnregisterDomainResponse
+	15, // 26: control.v2.ControlService.RegisterDomain:output_type -> control.v2.DomainRegistrationResponse
+	22, // [22:27] is the sub-list for method output_type
+	17, // [17:22] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_proto_control_proto_init() }
@@ -1245,8 +1463,8 @@ func file_proto_control_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_control_proto_rawDesc), len(file_proto_control_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   13,
+			NumEnums:      5,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
