@@ -254,7 +254,18 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 					body.StreamOpenResult.GetErrorCode(),
 					body.StreamOpenResult.GetMessage(),
 				)
-				dev.RemoveStream(frame.GetStreamId())
+			}
+			if !dev.ResolvePendingOpen(frame.GetStreamId(), body.StreamOpenResult) {
+				log.Printf(
+					"unexpected stream open result: fingerprint=%s session=%s stream_id=%d success=%t",
+					dev.Fingerprint,
+					dev.SessionID,
+					frame.GetStreamId(),
+					body.StreamOpenResult.GetSuccess(),
+				)
+				if !body.StreamOpenResult.GetSuccess() {
+					dev.RemoveStream(frame.GetStreamId())
+				}
 			}
 
 		case *tunnelpb.Frame_Ping:

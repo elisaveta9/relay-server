@@ -87,6 +87,9 @@ type Device struct {
 	streams    map[uint64]net.Conn
 	streamDone map[uint64]chan struct{}
 	nextID     uint64
+
+	pendingOpensMu sync.Mutex
+	pendingOpens   map[uint64]chan *tunnelpb.StreamOpenResult
 }
 
 func NewDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, sessionID string) *Device {
@@ -223,6 +226,8 @@ func newDevice(stream tunnelpb.TunnelService_TunnelServer, fingerprint string, s
 		streams:    make(map[uint64]net.Conn),
 		streamDone: make(map[uint64]chan struct{}),
 		nextID:     1,
+
+		pendingOpens: make(map[uint64]chan *tunnelpb.StreamOpenResult),
 	}
 
 	go d.writer()

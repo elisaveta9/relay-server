@@ -4,9 +4,14 @@ import (
 	"errors"
 	"log"
 	"net"
+
+	tunnelpb "relay/proto/tunnel/v2"
 )
 
-var ErrTooManyStreams = errors.New("too many active streams")
+var (
+	ErrTooManyStreams      = errors.New("too many active streams")
+	ErrStreamOpenIsPending = errors.New("stream open result is already pending")
+)
 
 func (d *Device) AllocateStreamID() uint64 {
 	d.streamsMu.Lock()
@@ -57,6 +62,44 @@ func (d *Device) GetClient(id uint64) (net.Conn, bool) {
 	defer d.streamsMu.Unlock()
 	c, ok := d.streams[id]
 	return c, ok
+}
+
+func (d *Device) RegisterPendingOpen(id uint64) (<-chan *tunnelpb.StreamOpenResult, error) {
+	d.pendingOpensMu.Lock()
+	defer d.pendingOpensMu.Unlock()
+
+	if _, exists := d.pendingOpens[id]; exists {
+		return nil, ErrStreamOpenIsPending
+	}
+	if d.pendingOpens == nil {
+		d.pendingOpens = make(map[uint64]chan *tunnelpb.StreamOpenResult)
+	}
+
+	ch := make(chan *tunnelpb.StreamOpenResult, 1)
+	d.pendingOpens[id] = ch
+	return ch, nil
+}
+
+func (d *Device) CancelPendingOpen(id uint64) {
+	d.pendingOpensMu.Lock()
+	delete(d.pendingOpens, id)
+	d.pendingOpensMu.Unlock()
+}
+
+func (d *Device) ResolvePendingOpen(id uint64, result *tunnelpb.StreamOpenResult) bool {
+	d.pendingOpensMu.Lock()
+	ch, exists := d.pendingOpens[id]
+	if exists {
+		delete(d.pendingOpens, id)
+	}
+	d.pendingOpensMu.Unlock()
+
+	if !exists {
+		return false
+	}
+
+	ch <- result
+	return true
 }
 
 func (d *Device) MaxFrameSizeBytes() uint32 {

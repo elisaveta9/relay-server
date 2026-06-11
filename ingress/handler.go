@@ -25,9 +25,9 @@ func handleClientTCP(conn net.Conn) {
 	defer closeConnLogged(conn, "ingress client", remote)
 
 	const (
-		readTimeout  = 30 * time.Second
-		writeTimeout = 30 * time.Second
-		sendTimeout  = 200 * time.Millisecond
+		readTimeout       = 30 * time.Second
+		sendTimeout       = 200 * time.Millisecond
+		openResultTimeout = 5 * time.Second
 	)
 
 	if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
@@ -47,7 +47,6 @@ func handleClientTCP(conn net.Conn) {
 	dev, bound := registry.Global.Get(sni)
 	if !bound || dev == nil {
 		log.Printf("ingress rejected: remote=%s sni=%q reason=no_device_bound", remote, sni)
-		writeHTTPReject(conn, remote, writeTimeout, "no_device_bound", []byte("HTTP/1.1 503 No device\r\n\r\n"))
 		return
 	}
 
@@ -59,7 +58,6 @@ func handleClientTCP(conn net.Conn) {
 			dev.Fingerprint,
 			dev.SessionID,
 		)
-		writeHTTPReject(conn, remote, writeTimeout, "device_admission_rejected", []byte("HTTP/1.1 503 Busy\r\nConnection: close\r\n\r\n"))
 		return
 	}
 
@@ -75,20 +73,35 @@ func handleClientTCP(conn net.Conn) {
 			streamID,
 			err,
 		)
-		writeHTTPReject(conn, remote, writeTimeout, "add_stream_failed", []byte("HTTP/1.1 503 Busy\r\nConnection: close\r\n\r\n"))
 		return
 	}
 
 	var removeOnce sync.Once
 	removeStream := func() { removeOnce.Do(func() { dev.RemoveStream(streamID) }) }
-	sendClose := func() {
+	sendClose := func(reason tunnelpb.CloseReason, message string) {
 		ctxClose, cancelClose := context.WithTimeout(context.Background(), sendTimeout)
 		defer cancelClose()
 
-		if err := dev.SendFrame(ctxClose, tunnelpb.NewStreamCloseFrame(streamID, tunnelpb.CloseReason_CLOSE_REASON_LOCAL_CLOSED, "")); err != nil {
+		if err := dev.SendFrame(ctxClose, tunnelpb.NewStreamCloseFrame(streamID, reason, message)); err != nil {
 			log.Printf("send close frame failed: remote=%s sni=%q stream=%d err=%v", remote, sni, streamID, err)
 		}
 	}
+
+	openResultCh, err := dev.RegisterPendingOpen(streamID)
+	if err != nil {
+		log.Printf(
+			"ingress rejected: remote=%s sni=%q reason=register_pending_open_failed fingerprint=%s session=%s stream=%d err=%v",
+			remote,
+			sni,
+			dev.Fingerprint,
+			dev.SessionID,
+			streamID,
+			err,
+		)
+		removeStream()
+		return
+	}
+	defer dev.CancelPendingOpen(streamID)
 
 	log.Printf(
 		"Client [%s] -> device fingerprint=%s session=%s stream=%d\n",
@@ -111,7 +124,67 @@ func handleClientTCP(conn net.Conn) {
 			streamID,
 			err,
 		)
-		writeHTTPReject(conn, remote, writeTimeout, "open_stream_send_failed", []byte("HTTP/1.1 503 Busy\r\nConnection: close\r\n\r\n"))
+		removeStream()
+		return
+	}
+
+	openTimer := time.NewTimer(openResultTimeout)
+	defer openTimer.Stop()
+
+	select {
+	case result := <-openResultCh:
+		if result == nil || !result.GetSuccess() {
+			code := tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_UNSPECIFIED
+			message := ""
+			if result != nil {
+				code = result.GetErrorCode()
+				message = result.GetMessage()
+			}
+			log.Printf(
+				"ingress rejected: remote=%s sni=%q reason=device_stream_open_failed fingerprint=%s session=%s stream=%d code=%s message=%q",
+				remote,
+				sni,
+				dev.Fingerprint,
+				dev.SessionID,
+				streamID,
+				code,
+				message,
+			)
+			removeStream()
+			return
+		}
+	case <-openTimer.C:
+		log.Printf(
+			"ingress rejected: remote=%s sni=%q reason=stream_open_result_timeout fingerprint=%s session=%s stream=%d timeout=%s",
+			remote,
+			sni,
+			dev.Fingerprint,
+			dev.SessionID,
+			streamID,
+			openResultTimeout,
+		)
+		sendClose(tunnelpb.CloseReason_CLOSE_REASON_ERROR, "stream open result timeout")
+		removeStream()
+		return
+	case <-done:
+		log.Printf(
+			"ingress rejected: remote=%s sni=%q reason=stream_closed_before_open_result fingerprint=%s session=%s stream=%d",
+			remote,
+			sni,
+			dev.Fingerprint,
+			dev.SessionID,
+			streamID,
+		)
+		return
+	case <-dev.Done():
+		log.Printf(
+			"ingress rejected: remote=%s sni=%q reason=device_closed_before_open_result fingerprint=%s session=%s stream=%d",
+			remote,
+			sni,
+			dev.Fingerprint,
+			dev.SessionID,
+			streamID,
+		)
 		removeStream()
 		return
 	}
@@ -130,7 +203,7 @@ func handleClientTCP(conn net.Conn) {
 			dev.MaxFrameSizeBytes(),
 			err,
 		)
-		sendClose()
+		sendClose(tunnelpb.CloseReason_CLOSE_REASON_ERROR, "client hello send failed")
 		removeStream()
 		return
 	}
@@ -144,7 +217,7 @@ func handleClientTCP(conn net.Conn) {
 	}
 	if err := conn.SetReadDeadline(time.Time{}); err != nil {
 		log.Printf("clear read deadline failed: remote=%s sni=%q stream=%d err=%v", remote, sni, streamID, err)
-		sendClose()
+		sendClose(tunnelpb.CloseReason_CLOSE_REASON_ERROR, "clear client read deadline failed")
 		removeStream()
 		return
 	}
@@ -156,7 +229,7 @@ func handleClientTCP(conn net.Conn) {
 		for {
 			n, rerr := br.Read(buf)
 			if rerr != nil {
-				sendClose()
+				sendClose(tunnelpb.CloseReason_CLOSE_REASON_LOCAL_CLOSED, "")
 
 				if errors.Is(rerr, io.EOF) {
 
@@ -172,7 +245,7 @@ func handleClientTCP(conn net.Conn) {
 			cancelData()
 
 			if err != nil {
-				sendClose()
+				sendClose(tunnelpb.CloseReason_CLOSE_REASON_ERROR, "client data send failed")
 				removeStream()
 				return
 			}
@@ -242,16 +315,6 @@ func maxStreamDataPayloadSize(streamID uint64, maxFrameSizeBytes uint32) int {
 		}
 	}
 	return low
-}
-
-func writeHTTPReject(conn net.Conn, remote string, timeout time.Duration, reason string, body []byte) {
-	if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-		log.Printf("set write deadline failed: remote=%s reason=%s err=%v", remote, reason, err)
-		return
-	}
-	if _, err := conn.Write(body); err != nil {
-		log.Printf("write rejection response failed: remote=%s reason=%s err=%v", remote, reason, err)
-	}
 }
 
 func closeConnLogged(conn net.Conn, label string, remote string) {
