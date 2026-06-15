@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"expvar"
 	"fmt"
 	"io"
@@ -62,6 +64,7 @@ func main() {
 		envFile("RELAY_GRPC_CERT_FILE", "certs/server.crt"),
 		envFile("RELAY_GRPC_KEY_FILE", "certs/server.key"),
 		envFile("RELAY_DEVICE_CA_CERT_FILE", "certs/ca.crt"),
+		repo,
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -112,12 +115,16 @@ func main() {
 		}
 	}()
 
-	go func() {
-		log.Println("debug server (pprof/vars) listening on", debugServer.Addr)
-		if err := debugServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			serverErrCh <- fmt.Errorf("debug server: %w", err)
-		}
-	}()
+	if debugServer != nil {
+		go func() {
+			log.Println("authenticated debug server (pprof/vars) listening on", debugServer.Addr)
+			if err := debugServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				serverErrCh <- fmt.Errorf("debug server: %w", err)
+			}
+		}()
+	} else {
+		log.Println("debug server is disabled; set RELAY_DEBUG_USERNAME and RELAY_DEBUG_PASSWORD to enable it")
+	}
 
 	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
@@ -154,6 +161,12 @@ func main() {
 }
 
 func newDebugServer() *http.Server {
+	username := os.Getenv("RELAY_DEBUG_USERNAME")
+	password := os.Getenv("RELAY_DEBUG_PASSWORD")
+	if username == "" || password == "" {
+		return nil
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/debug/vars", expvar.Handler())
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -164,12 +177,32 @@ func newDebugServer() *http.Server {
 
 	return &http.Server{
 		Addr:              envFile("RELAY_DEBUG_ADDR", "127.0.0.1:6060"),
-		Handler:           mux,
+		Handler:           requireBasicAuth(username, password, mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+}
+
+func requireBasicAuth(username string, password string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		providedUsername, providedPassword, ok := r.BasicAuth()
+		usernameOK := constantTimeCredentialEqual(providedUsername, username)
+		passwordOK := constantTimeCredentialEqual(providedPassword, password)
+		if !ok || !usernameOK || !passwordOK {
+			w.Header().Set("WWW-Authenticate", `Basic realm="relay-debug", charset="UTF-8"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func constantTimeCredentialEqual(left string, right string) bool {
+	leftHash := sha256.Sum256([]byte(left))
+	rightHash := sha256.Sum256([]byte(right))
+	return subtle.ConstantTimeCompare(leftHash[:], rightHash[:]) == 1
 }
 
 func shutdownServers(
@@ -187,11 +220,17 @@ func shutdownServers(
 		}
 	}
 
-	wg.Add(4)
+	serverCount := 3
+	if debugServer != nil {
+		serverCount++
+	}
+	wg.Add(serverCount)
 	go shutdown("admin server", adminServer.Shutdown)
 	go shutdown("gRPC server", grpcServer.Shutdown)
 	go shutdown("ingress server", ingressServer.Shutdown)
-	go shutdown("debug server", debugServer.Shutdown)
+	if debugServer != nil {
+		go shutdown("debug server", debugServer.Shutdown)
+	}
 	wg.Wait()
 }
 

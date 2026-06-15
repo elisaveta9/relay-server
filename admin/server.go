@@ -29,20 +29,30 @@ func NewServer(config ServerConfig, repo *storage.Repository) (*Server, error) {
 	mux.Handle("/domains", requireAPIKey(http.HandlerFunc(domainsHandler(repo))))
 	ServeAPIv1(mux, repo)
 
-	enrollHandler, err := newEnrollmentHandler(config.DeviceCAFile, config.DeviceCAKey)
+	enrollHandler, err := newEnrollmentHandler(config.DeviceCAFile, config.DeviceCAKey, repo)
 	if err != nil {
 		return nil, fmt.Errorf("cannot initialize enrollment handler: %w", err)
 	}
 	mux.Handle("/enroll", enrollHandler)
 
+	mux.HandleFunc("/admin.css", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "admin.css")
+	})
+	mux.HandleFunc("/admin.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "admin.js")
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
 		http.ServeFile(w, r, "admin.html")
 	})
 
 	return &Server{
 		httpServer: &http.Server{
 			Addr:              config.Addr,
-			Handler:           mux,
+			Handler:           securityHeaders(mux),
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       15 * time.Second,
 			WriteTimeout:      30 * time.Second,

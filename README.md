@@ -58,13 +58,19 @@ Go 1.24+ установите из пакетов дистрибутива, snap
 
    Обязательные переменные:
 
-   - `SECRET_API_KEY` - ключ доступа к admin API.
+   - `SECRET_API_KEY` - ключ доступа к admin API, передаваемый как
+     `Authorization: Bearer <key>`.
    - `DATABASE_URL` или `RELAY_DATABASE_DSN` - строка подключения к PostgreSQL.
 
    Дополнительные переменные:
 
    - `RELAY_ENROLLMENT_TOKEN` - включает endpoint регистрации устройств.
-   - `TLS_CLIENT_AUTH` - режим проверки клиентских сертификатов для gRPC.
+     Клиент передаёт токен только в JSON-поле `token` запроса `POST /enroll`.
+   - `TLS_CLIENT_AUTH` - режим проверки клиентских сертификатов для gRPC:
+     `require` (по умолчанию) или `request`; режим без client certificate отключен.
+   - `RELAY_DEBUG_USERNAME` и `RELAY_DEBUG_PASSWORD` - включают локальные
+     `expvar`/`pprof` endpoints с Basic Auth. Без обеих переменных debug-сервер
+     не запускается.
    - `RELAY_INGRESS_MAX_CONNS` - лимит одновременных public TCP-подключений.
    - `RELAY_MAX_STREAMS_PER_DEVICE` - лимит активных stream на устройство.
    - `RELAY_CONTROL_QUEUE_SIZE` - размер очереди control frames.
@@ -184,7 +190,8 @@ production лучше не держать весь процесс под root.
 - `:443` - публичный TCP ingress для HTTPS passthrough.
 - `:50051` - gRPC-туннель для устройств.
 - `:8443` - admin UI/API.
-- `127.0.0.1:6060` - локальные debug endpoints: `expvar` и `pprof`.
+- `127.0.0.1:6060` - локальные debug endpoints: `expvar` и `pprof`; сервер
+  запускается только с `RELAY_DEBUG_USERNAME` и `RELAY_DEBUG_PASSWORD`.
 
 ## Сертификаты
 

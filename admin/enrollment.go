@@ -18,6 +18,10 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"relay/storage"
 )
 
 var EnrollmentToken string
@@ -26,6 +30,7 @@ type enrollmentHandler struct {
 	caCert *x509.Certificate
 	caKey  crypto.Signer
 	caPEM  []byte
+	repo   *storage.Repository
 }
 
 type enrollRequest struct {
@@ -41,11 +46,18 @@ type enrollResponse struct {
 	ExpiresAt      string `json:"expires_at"`
 }
 
-func newEnrollmentHandler(caCertPath string, caKeyPath string) (http.Handler, error) {
+func newEnrollmentHandler(
+	caCertPath string,
+	caKeyPath string,
+	repo *storage.Repository,
+) (http.Handler, error) {
 	if EnrollmentToken == "" {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "device enrollment is disabled", http.StatusServiceUnavailable)
 		}), nil
+	}
+	if repo == nil {
+		return nil, errors.New("device repository is required while enrollment is enabled")
 	}
 
 	caCert, caPEM, err := loadCACertificate(caCertPath)
@@ -62,6 +74,7 @@ func newEnrollmentHandler(caCertPath string, caKeyPath string) (http.Handler, er
 		caCert: caCert,
 		caKey:  caKey,
 		caPEM:  caPEM,
+		repo:   repo,
 	}
 	return http.HandlerFunc(h.handle), nil
 }
@@ -77,16 +90,19 @@ func (h *enrollmentHandler) handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-
 	token := strings.TrimSpace(req.Token)
-	if token == "" {
-		token = strings.TrimSpace(r.Header.Get("X-Enrollment-Token"))
-	}
-	if token != EnrollmentToken {
-		adminLogger.Printf("ENROLL AUTH_FAIL ip=%s device=%q", r.RemoteAddr, req.DeviceName)
+	if !constantTimeEqual(token, EnrollmentToken) {
+		logAdmin("ENROLL AUTH_FAIL ip=%s device=%q", r.RemoteAddr, req.DeviceName)
 		http.Error(w, "invalid enrollment token", http.StatusForbidden)
 		return
 	}
+
+	deviceName, err := validateDeviceName(req.DeviceName)
+	if err != nil {
+		http.Error(w, "invalid device_name", http.StatusBadRequest)
+		return
+	}
+	req.DeviceName = deviceName
 
 	csr, err := parseCSR(req.CSRPEM)
 	if err != nil {
@@ -100,7 +116,7 @@ func (h *enrollmentHandler) handle(w http.ResponseWriter, r *http.Request) {
 
 	der, expiresAt, err := h.signClientCertificate(csr)
 	if err != nil {
-		adminLogger.Printf("ENROLL SIGN_FAIL ip=%s device=%q err=%v", r.RemoteAddr, req.DeviceName, err)
+		logAdmin("ENROLL SIGN_FAIL ip=%s device=%q err=%v", r.RemoteAddr, req.DeviceName, err)
 		http.Error(w, "cannot sign certificate", http.StatusInternalServerError)
 		return
 	}
@@ -109,7 +125,13 @@ func (h *enrollmentHandler) handle(w http.ResponseWriter, r *http.Request) {
 	fingerprint := hex.EncodeToString(sum[:])
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 
-	adminLogger.Printf(
+	if _, err := h.repo.TouchDeviceRegistration(r.Context(), fingerprint); err != nil {
+		logAdmin("ENROLL REGISTER_FAIL ip=%s device=%q err=%v", r.RemoteAddr, req.DeviceName, err)
+		http.Error(w, "cannot register device", http.StatusInternalServerError)
+		return
+	}
+
+	logAdmin(
 		"ENROLL ISSUED fingerprint=%s device=%q subject=%q ip=%s",
 		fingerprint,
 		req.DeviceName,
@@ -124,8 +146,25 @@ func (h *enrollmentHandler) handle(w http.ResponseWriter, r *http.Request) {
 		Fingerprint:    fingerprint,
 		ExpiresAt:      expiresAt.Format(time.RFC3339),
 	}); err != nil {
-		adminLogger.Printf("ENROLL WRITE_FAIL fingerprint=%s err=%v", fingerprint, err)
+		logAdmin("ENROLL WRITE_FAIL fingerprint=%s err=%v", fingerprint, err)
 	}
+}
+
+func validateDeviceName(value string) (string, error) {
+	if !utf8.ValidString(value) {
+		return "", errors.New("device name is not valid UTF-8")
+	}
+
+	value = strings.TrimSpace(value)
+	if value == "" || utf8.RuneCountInString(value) > 128 {
+		return "", errors.New("device name must contain between 1 and 128 characters")
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return "", errors.New("device name contains control characters")
+		}
+	}
+	return value, nil
 }
 
 func (h *enrollmentHandler) signClientCertificate(csr *x509.CertificateRequest) ([]byte, time.Time, error) {

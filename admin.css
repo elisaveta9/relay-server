@@ -1,0 +1,57 @@
+body {
+  font-family: sans-serif;
+  max-width: 760px;
+  margin: 40px auto;
+}
+
+h1 {
+  margin-bottom: 10px;
+}
+
+input,
+button {
+  padding: 6px;
+  font-size: 14px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+th,
+td {
+  border-bottom: 1px solid #ddd;
+  padding: 8px;
+  vertical-align: top;
+}
+
+th {
+  text-align: left;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.spaced-input {
+  margin-top: 8px;
+}
+
+.error {
+  color: red;
+}
+
+.muted {
+  color: #666;
+  font-size: 12px;
+}
+
+.row-actions button {
+  margin-right: 6px;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}

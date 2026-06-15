@@ -31,7 +31,8 @@ func NewServer(addr string, tlsCfg *tls.Config, repo *storage.Repository) (*Serv
 	const (
 		maxConcurrentStreams = 1024
 
-		maxConnectionAge = 0 * time.Minute
+		maxConnectionAge      = 30 * time.Minute
+		maxConnectionAgeGrace = 5 * time.Minute
 	)
 
 	grpcServer := grpc.NewServer(
@@ -46,7 +47,7 @@ func NewServer(addr string, tlsCfg *tls.Config, repo *storage.Repository) (*Serv
 			Time:                  30 * time.Second,
 			Timeout:               10 * time.Second,
 			MaxConnectionAge:      maxConnectionAge,
-			MaxConnectionAgeGrace: 5 * time.Second,
+			MaxConnectionAgeGrace: maxConnectionAgeGrace,
 		}),
 
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{

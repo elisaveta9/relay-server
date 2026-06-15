@@ -25,7 +25,11 @@ type TunnelServiceImpl struct {
 	Store *storage.Repository
 }
 
-const terminalFrameSendTimeout = time.Second
+const (
+	terminalFrameSendTimeout     = time.Second
+	tunnelSessionCleanupTimeout  = 5 * time.Second
+	tunnelResultFrameSendTimeout = 200 * time.Millisecond
+)
 
 func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (retErr error) {
 	fingerprint, err := storage.ClientCertFingerprint(stream.Context())
@@ -56,16 +60,20 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 
 	domains, err := s.Store.ListDomainsForFingerprint(stream.Context(), fingerprint)
 	if err != nil {
-		if closeErr := s.Store.CloseDeviceSession(context.Background(), session.ID); closeErr != nil {
+		cleanupCtx, cancel := tunnelSetupCleanupContext(stream.Context())
+		if closeErr := s.Store.CloseDeviceSession(cleanupCtx, session.ID); closeErr != nil {
 			log.Println("close device session after welcome preparation failed:", closeErr)
 		}
+		cancel()
 		return storageError("list domains for tunnel welcome", err)
 	}
 	challenges, err := s.Store.ListDomainOwnershipChallengesForFingerprint(stream.Context(), fingerprint)
 	if err != nil {
-		if closeErr := s.Store.CloseDeviceSession(context.Background(), session.ID); closeErr != nil {
+		cleanupCtx, cancel := tunnelSetupCleanupContext(stream.Context())
+		if closeErr := s.Store.CloseDeviceSession(cleanupCtx, session.ID); closeErr != nil {
 			log.Println("close device session after verification snapshot failed:", closeErr)
 		}
+		cancel()
 		return storageError("list domain verifications for tunnel welcome", err)
 	}
 
@@ -87,15 +95,19 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 			"negotiated frame size is too small for tunnel welcome",
 			"",
 		)
-		if closeErr := s.Store.CloseDeviceSession(context.Background(), session.ID); closeErr != nil {
+		cleanupCtx, cancel := tunnelSetupCleanupContext(stream.Context())
+		if closeErr := s.Store.CloseDeviceSession(cleanupCtx, session.ID); closeErr != nil {
 			log.Println("close device session after oversized welcome failed:", closeErr)
 		}
+		cancel()
 		return status.Error(codes.ResourceExhausted, err.Error())
 	}
 	if err := stream.Send(welcomeFrame); err != nil {
-		if closeErr := s.Store.CloseDeviceSession(context.Background(), session.ID); closeErr != nil {
+		cleanupCtx, cancel := tunnelSetupCleanupContext(stream.Context())
+		if closeErr := s.Store.CloseDeviceSession(cleanupCtx, session.ID); closeErr != nil {
 			log.Println("close device session after welcome send failed:", closeErr)
 		}
+		cancel()
 		return err
 	}
 
@@ -175,21 +187,21 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 
 			if body.BindRequest.GetServeMode() != tunnelpb.ServeMode_SERVE_MODE_HTTPS_PASSTHROUGH {
 				log.Println("Bind rejected, unsupported serve mode:", body.BindRequest.GetServeMode())
-				sendBindResult(dev, requestedDomain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_INVALID_FRAME, "unsupported serve mode")
+				sendBindResult(stream.Context(), dev, requestedDomain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_INVALID_FRAME, "unsupported serve mode")
 				continue
 			}
 
 			domain, err := storage.NormalizeDomain(requestedDomain)
 			if err != nil {
 				log.Println("Bind rejected, invalid domain:", requestedDomain)
-				sendBindResult(dev, requestedDomain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_INVALID_DOMAIN, "invalid domain")
+				sendBindResult(stream.Context(), dev, requestedDomain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_INVALID_DOMAIN, "invalid domain")
 				continue
 			}
 
 			domainObj, err := s.Store.AuthorizeBind(stream.Context(), fingerprint, domain)
 			if err != nil {
 				log.Println("Bind rejected:", err)
-				sendBindResult(dev, domain, false, bindErrorCode(err), bindErrorMessage(err))
+				sendBindResult(stream.Context(), dev, domain, false, bindErrorCode(err), bindErrorMessage(err))
 				continue
 			}
 
@@ -228,7 +240,7 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 					log.Println("failed to write domain history (BIND):", err)
 				}
 			}
-			sendBindResult(dev, domain, true, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_UNSPECIFIED, "")
+			sendBindResult(stream.Context(), dev, domain, true, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_UNSPECIFIED, "")
 			sendDomainSync(stream.Context(), s.Store, dev)
 
 		case *tunnelpb.Frame_StreamData:
@@ -288,18 +300,18 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 			domain, err := storage.NormalizeDomain(requestedDomain)
 			if err != nil {
 				log.Println("Unbind rejected, invalid domain:", requestedDomain)
-				sendUnbindResult(dev, requestedDomain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_INVALID_DOMAIN, "invalid domain")
+				sendUnbindResult(stream.Context(), dev, requestedDomain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_INVALID_DOMAIN, "invalid domain")
 				continue
 			}
 
 			if cur, ok := registry.Global.Get(domain); !ok {
 
 				log.Println("Unbind rejected, domain not bound:", domain)
-				sendUnbindResult(dev, domain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_DOMAIN_NOT_REGISTERED, "domain is not bound")
+				sendUnbindResult(stream.Context(), dev, domain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_DOMAIN_NOT_REGISTERED, "domain is not bound")
 				continue
 			} else if cur != dev {
 				log.Println("Unbind rejected, device does not own active binding:", domain)
-				sendUnbindResult(dev, domain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_DOMAIN_NOT_OWNED, "device does not own active binding")
+				sendUnbindResult(stream.Context(), dev, domain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_DOMAIN_NOT_OWNED, "device does not own active binding")
 				continue
 			}
 
@@ -313,11 +325,11 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 				storage.DomainActionUnbind,
 			); err != nil {
 				log.Println("failed to write domain history (UNBIND):", err)
-				sendUnbindResult(dev, domain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_INTERNAL, "failed to write domain history")
+				sendUnbindResult(stream.Context(), dev, domain, false, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_INTERNAL, "failed to write domain history")
 				continue
 			}
 
-			sendUnbindResult(dev, domain, true, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_UNSPECIFIED, "")
+			sendUnbindResult(stream.Context(), dev, domain, true, tunnelpb.TunnelErrorCode_TUNNEL_ERROR_CODE_UNSPECIFIED, "")
 			sendDomainSync(stream.Context(), s.Store, dev)
 
 		case *tunnelpb.Frame_Hello:
@@ -498,22 +510,30 @@ func isTunnelConnectionResetMessage(message string) bool {
 	return strings.Contains(msg, "connection reset") || strings.Contains(msg, "forcibly closed")
 }
 
-func sendBindResult(dev *device.Device, domain string, success bool, code tunnelpb.TunnelErrorCode, message string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+func sendBindResult(ctx context.Context, dev *device.Device, domain string, success bool, code tunnelpb.TunnelErrorCode, message string) error {
+	ctx, cancel := context.WithTimeout(ctx, tunnelResultFrameSendTimeout)
 	defer cancel()
 
-	if err := dev.SendFrame(ctx, tunnelpb.NewBindResultFrame(domain, success, code, message)); err != nil {
+	err := dev.SendFrame(ctx, tunnelpb.NewBindResultFrame(domain, success, code, message))
+	if err != nil {
 		log.Printf("send bind result failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
 	}
+	return err
 }
 
-func sendUnbindResult(dev *device.Device, domain string, success bool, code tunnelpb.TunnelErrorCode, message string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+func sendUnbindResult(ctx context.Context, dev *device.Device, domain string, success bool, code tunnelpb.TunnelErrorCode, message string) error {
+	ctx, cancel := context.WithTimeout(ctx, tunnelResultFrameSendTimeout)
 	defer cancel()
 
-	if err := dev.SendFrame(ctx, tunnelpb.NewUnbindResultFrame(domain, success, code, message)); err != nil {
+	err := dev.SendFrame(ctx, tunnelpb.NewUnbindResultFrame(domain, success, code, message))
+	if err != nil {
 		log.Printf("send unbind result failed: domain=%s fingerprint=%s session=%s err=%v", domain, dev.Fingerprint, dev.SessionID, err)
 	}
+	return err
+}
+
+func tunnelSetupCleanupContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(parent), tunnelSessionCleanupTimeout)
 }
 
 func sendDomainSync(ctx context.Context, store *storage.Repository, dev *device.Device) {

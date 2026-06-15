@@ -18,6 +18,7 @@ import (
 
 var (
 	ErrFingerprintInvalid               = errors.New("invalid certificate fingerprint")
+	ErrDeviceNotFound                   = errors.New("device not found")
 	ErrDeviceRevoked                    = errors.New("device is revoked")
 	ErrDomainInvalid                    = errors.New("invalid domain")
 	ErrDomainAlreadyUsed                = errors.New("domain is already registered to another device")
@@ -1093,6 +1094,29 @@ func (r *Repository) GetDeviceIDForFingerprint(ctx context.Context, fingerprint 
 		return uuid.Nil, fmt.Errorf("lookup device by fingerprint: %w", err)
 	}
 	return device.ID, nil
+}
+
+func (r *Repository) VerifyDeviceFingerprint(ctx context.Context, fingerprint string) error {
+	fingerprint, err := normalizeFingerprint(fingerprint)
+	if err != nil {
+		return err
+	}
+
+	var device Device
+	err = r.db.WithContext(ctx).
+		Select("id", "status").
+		Where("cert_fingerprint = ?", fingerprint).
+		First(&device).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrDeviceNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("verify device fingerprint: %w", err)
+	}
+	if device.Status == DeviceStatusRevoked {
+		return ErrDeviceRevoked
+	}
+	return nil
 }
 
 func (r *Repository) TouchDeviceRegistration(ctx context.Context, fingerprint string) (*Device, error) {
