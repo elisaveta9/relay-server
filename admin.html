@@ -2,43 +2,215 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Relay Admin Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Panel</title>
   <link rel="stylesheet" href="/admin.css" />
   <script src="/admin.js" defer></script>
 </head>
 <body>
+<main>
+  <header class="page-header">
+    <h1>Admin Panel</h1>
+    <p class="muted">Page for managing devices, sessions and domains.</p>
+    <button id="refreshAll" type="button">Refresh all</button>
+  </header>
 
-<h1>Relay Admin Panel</h1>
+  <hr />
 
-<label>
-  API Key:
-  <input id="apiKey" class="full-width" type="password" />
-</label>
+  <section class="panel auth-panel">
+    <label for="apiKey">API Key:</label>
+    <div class="inline-form">
+      <input id="apiKey" type="password" autocomplete="off" />
+      <button id="connect" type="button">Connect</button>
+    </div>
+  </section>
 
-<hr>
+  <p id="status" class="status" role="status"></p>
 
-<h3>Domains</h3>
-<button id="refreshDomains" type="button">Refresh</button>
-<table>
-  <thead>
-    <tr>
-      <th>FQDN</th>
-      <th>Status</th>
-      <th>Device</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
-  <tbody id="domains"></tbody>
-</table>
+  <section class="panel">
+    <div class="section-heading">
+      <h2>Devices</h2>
+      <span id="deviceCount" class="counter">0</span>
+    </div>
+    <form id="deviceFilters" class="filters device-filters">
+      <label>
+        Status
+        <select id="deviceStatus">
+          <option value="">All</option>
+          <option value="device_status_active">Active</option>
+          <option value="device_status_revoked">Revoked</option>
+        </select>
+      </label>
+      <label>
+        Connected
+        <select id="deviceConnected">
+          <option value="">All</option>
+          <option value="true">Connected</option>
+          <option value="false">Offline</option>
+        </select>
+      </label>
+      <label>
+        Last seen from
+        <input id="deviceLastSeenFrom" type="date" />
+      </label>
+      <label>
+        Last seen to
+        <input id="deviceLastSeenTo" type="date" />
+      </label>
+      <button type="submit">Apply</button>
+      <button id="resetDeviceFilters" type="button" class="secondary">Reset</button>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fingerprint</th>
+            <th>Status</th>
+            <th>Connected</th>
+            <th>Domains</th>
+            <th>Last seen</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="devices"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button id="previousDevices" type="button" class="secondary">Previous</button>
+      <span id="devicePage">Page 1</span>
+      <button id="nextDevices" type="button" class="secondary">Next</button>
+    </div>
+  </section>
 
-<hr>
+  <section class="panel">
+    <div class="section-heading">
+      <h2 id="sessionsTitle">Active sessions</h2>
+      <span id="sessionCount" class="counter">0</span>
+    </div>
+    <form id="sessionFilters" class="filters session-filters">
+      <label>
+        Device fingerprint
+        <input id="sessionFingerprint" placeholder="leave empty for active sessions" />
+      </label>
+      <button type="submit">Show sessions</button>
+      <button id="resetSessionFilters" type="button" class="secondary">Active only</button>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Device fingerprint</th>
+            <th>Opened</th>
+            <th>Closed</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="sessions"></tbody>
+      </table>
+    </div>
+  </section>
 
-<h3>Add domain</h3>
-<input id="newDomain" class="full-width" placeholder="example.phone.local" />
-<input id="ownerFingerprint" class="full-width spaced-input" placeholder="owner cert fingerprint (SHA-256)" />
-<button id="addDomain" type="button">Add</button>
+  <section class="panel">
+    <div class="section-heading">
+      <h2>Domains</h2>
+      <span id="domainCount" class="counter">0</span>
+    </div>
 
-<p id="status" class="error"></p>
+    <form id="domainFilters" class="filters">
+      <label>
+        Search
+        <input id="domainSearch" type="search" placeholder="example.com" />
+      </label>
+      <label>
+        Status
+        <select id="domainStatus">
+          <option value="">All</option>
+          <option value="domain_status_registered">Registered</option>
+          <option value="domain_status_bound">Bound</option>
+          <option value="domain_status_disabled">Disabled</option>
+        </select>
+      </label>
+      <label>
+        Device
+        <input id="domainDevice" placeholder="fingerprint or UUID" />
+      </label>
+      <label>
+        From
+        <input id="domainFrom" type="date" />
+      </label>
+      <label>
+        To
+        <input id="domainTo" type="date" />
+      </label>
+      <button type="submit">Apply</button>
+      <button id="resetDomainFilters" type="button" class="secondary">Reset</button>
+    </form>
 
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>FQDN</th>
+            <th>Status</th>
+            <th>Device</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="domains"></tbody>
+      </table>
+    </div>
+
+    <div class="pagination">
+      <button id="previousDomains" type="button" class="secondary">Previous</button>
+      <span id="domainPage">Page 1</span>
+      <button id="nextDomains" type="button" class="secondary">Next</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Add domain</h2>
+    <div class="add-domain-form">
+      <label>
+        FQDN
+        <input id="newDomain" placeholder="example.phone.local" />
+      </label>
+      <label>
+        Device fingerprint
+        <input id="ownerFingerprint" placeholder="SHA-256 fingerprint" />
+      </label>
+      <button id="addDomain" type="button">Add domain</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <h2>Server logs</h2>
+      <div class="log-controls">
+        <label class="log-label">
+          Source
+          <select id="logSource">
+            <option value="server">server.log</option>
+            <option value="admin">admin.log</option>
+          </select>
+        </label>
+        <label class="log-label">
+          Lines
+          <input id="logLines" type="number" value="200" min="1" max="1000" />
+        </label>
+        <button id="loadLogs" type="button">Load</button>
+        <label class="log-auto-label">
+          <input id="logAutoRefresh" type="checkbox" />
+          Auto-refresh
+        </label>
+      </div>
+    </div>
+    <pre id="logOutput" class="log-output"><span class="muted">Press Load to fetch logs.</span></pre>
+  </section>
+
+  <hr />
+  <p class="muted">Admin panel - course project, 2026</p>
+</main>
 </body>
 </html>
