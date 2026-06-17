@@ -109,7 +109,7 @@ message DNSInstruction {
   string record_name = 1;
   DNSRecordType record_type = 2;
   string record_value = 3;
-  uint32 ttl_seconds = 4;
+  uint32 ttl_seconds = 4 [deprecated = true];
   string purpose = 5;
   int64 expires_at_unix_ms = 6;
 }

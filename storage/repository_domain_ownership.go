@@ -18,7 +18,7 @@ func (r *Repository) GetOrCreateDomainOwnershipChallenge(
 	ctx context.Context,
 	fingerprint string,
 	fqdn string,
-	ttl time.Duration,
+	lifetime time.Duration,
 	initialVerificationDelay time.Duration,
 	maxActive int,
 ) (*DomainOwnershipChallenge, error) {
@@ -30,8 +30,8 @@ func (r *Repository) GetOrCreateDomainOwnershipChallenge(
 	if err != nil {
 		return nil, err
 	}
-	if ttl <= 0 || initialVerificationDelay < 0 {
-		return nil, fmt.Errorf("create domain ownership challenge: invalid ttl")
+	if lifetime <= 0 || initialVerificationDelay < 0 {
+		return nil, fmt.Errorf("create domain ownership challenge: invalid lifetime")
 	}
 	if maxActive <= 0 {
 		return nil, fmt.Errorf("create domain ownership challenge: invalid active challenge limit")
@@ -98,7 +98,7 @@ func (r *Repository) GetOrCreateDomainOwnershipChallenge(
 		challenge.RecordName = domainOwnershipRecordPrefix + fqdn
 		challenge.RecordValue = "relay-domain-verification=" + token
 		challenge.Status = DomainOwnershipChallengeStatusPending
-		challenge.ExpiresAt = now.Add(ttl)
+		challenge.ExpiresAt = now.Add(lifetime)
 		nextVerificationAt := now.Add(initialVerificationDelay)
 		challenge.NextVerificationAt = &nextVerificationAt
 		challenge.VerificationAttempts = 0

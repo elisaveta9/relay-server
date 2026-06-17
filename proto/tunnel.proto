@@ -164,7 +164,7 @@ message DomainVerificationUpdate {
   DomainVerificationStatus status = 2;
   string record_name = 3;
   string record_value = 4;
-  uint32 ttl_seconds = 5;
+  uint32 ttl_seconds = 5 [deprecated = true];
   int64 expires_at_unix_ms = 6;
   uint32 verification_attempts = 7;
   int64 next_verification_at_unix_ms = 8;

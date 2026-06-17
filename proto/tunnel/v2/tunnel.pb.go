@@ -131,6 +131,7 @@ const (
 	DomainVerificationStatus_DOMAIN_VERIFICATION_STATUS_EXPIRED     DomainVerificationStatus = 3
 )
 
+// Enum value maps for DomainVerificationStatus.
 var (
 	DomainVerificationStatus_name = map[int32]string{
 		0: "DOMAIN_VERIFICATION_STATUS_UNSPECIFIED",
@@ -168,6 +169,7 @@ func (x DomainVerificationStatus) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
+// Deprecated: Use DomainVerificationStatus.Descriptor instead.
 func (DomainVerificationStatus) EnumDescriptor() ([]byte, []int) {
 	return file_proto_tunnel_proto_rawDescGZIP(), []int{2}
 }
@@ -184,6 +186,7 @@ const (
 	CloseReason_CLOSE_REASON_ERROR         CloseReason = 6
 )
 
+// Enum value maps for CloseReason.
 var (
 	CloseReason_name = map[int32]string{
 		0: "CLOSE_REASON_UNSPECIFIED",
@@ -245,6 +248,7 @@ const (
 	DisconnectReason_DISCONNECT_REASON_IDLE_TIMEOUT      DisconnectReason = 7
 )
 
+// Enum value maps for DisconnectReason.
 var (
 	DisconnectReason_name = map[int32]string{
 		0: "DISCONNECT_REASON_UNSPECIFIED",
@@ -1863,19 +1867,20 @@ func (x *DomainRevoked) GetRevokeReason() DomainRevokeReason {
 }
 
 type DomainVerificationUpdate struct {
-	state                    protoimpl.MessageState   `protogen:"open.v1"`
-	Domain                   string                   `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
-	Status                   DomainVerificationStatus `protobuf:"varint,2,opt,name=status,proto3,enum=tunnel.v2.DomainVerificationStatus" json:"status,omitempty"`
-	RecordName               string                   `protobuf:"bytes,3,opt,name=record_name,json=recordName,proto3" json:"record_name,omitempty"`
-	RecordValue              string                   `protobuf:"bytes,4,opt,name=record_value,json=recordValue,proto3" json:"record_value,omitempty"`
-	TtlSeconds               uint32                   `protobuf:"varint,5,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
-	ExpiresAtUnixMs          int64                    `protobuf:"varint,6,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
-	VerificationAttempts     uint32                   `protobuf:"varint,7,opt,name=verification_attempts,json=verificationAttempts,proto3" json:"verification_attempts,omitempty"`
-	NextVerificationAtUnixMs int64                    `protobuf:"varint,8,opt,name=next_verification_at_unix_ms,json=nextVerificationAtUnixMs,proto3" json:"next_verification_at_unix_ms,omitempty"`
-	LastVerificationAtUnixMs int64                    `protobuf:"varint,9,opt,name=last_verification_at_unix_ms,json=lastVerificationAtUnixMs,proto3" json:"last_verification_at_unix_ms,omitempty"`
-	LastError                string                   `protobuf:"bytes,10,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
-	VerifiedAtUnixMs         int64                    `protobuf:"varint,11,opt,name=verified_at_unix_ms,json=verifiedAtUnixMs,proto3" json:"verified_at_unix_ms,omitempty"`
-	CanRequestNewChallenge   bool                     `protobuf:"varint,12,opt,name=can_request_new_challenge,json=canRequestNewChallenge,proto3" json:"can_request_new_challenge,omitempty"`
+	state       protoimpl.MessageState   `protogen:"open.v1"`
+	Domain      string                   `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Status      DomainVerificationStatus `protobuf:"varint,2,opt,name=status,proto3,enum=tunnel.v2.DomainVerificationStatus" json:"status,omitempty"`
+	RecordName  string                   `protobuf:"bytes,3,opt,name=record_name,json=recordName,proto3" json:"record_name,omitempty"`
+	RecordValue string                   `protobuf:"bytes,4,opt,name=record_value,json=recordValue,proto3" json:"record_value,omitempty"`
+	// Deprecated: Marked as deprecated in proto/tunnel.proto.
+	TtlSeconds               uint32 `protobuf:"varint,5,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	ExpiresAtUnixMs          int64  `protobuf:"varint,6,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	VerificationAttempts     uint32 `protobuf:"varint,7,opt,name=verification_attempts,json=verificationAttempts,proto3" json:"verification_attempts,omitempty"`
+	NextVerificationAtUnixMs int64  `protobuf:"varint,8,opt,name=next_verification_at_unix_ms,json=nextVerificationAtUnixMs,proto3" json:"next_verification_at_unix_ms,omitempty"`
+	LastVerificationAtUnixMs int64  `protobuf:"varint,9,opt,name=last_verification_at_unix_ms,json=lastVerificationAtUnixMs,proto3" json:"last_verification_at_unix_ms,omitempty"`
+	LastError                string `protobuf:"bytes,10,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	VerifiedAtUnixMs         int64  `protobuf:"varint,11,opt,name=verified_at_unix_ms,json=verifiedAtUnixMs,proto3" json:"verified_at_unix_ms,omitempty"`
+	CanRequestNewChallenge   bool   `protobuf:"varint,12,opt,name=can_request_new_challenge,json=canRequestNewChallenge,proto3" json:"can_request_new_challenge,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -1938,6 +1943,7 @@ func (x *DomainVerificationUpdate) GetRecordValue() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in proto/tunnel.proto.
 func (x *DomainVerificationUpdate) GetTtlSeconds() uint32 {
 	if x != nil {
 		return x.TtlSeconds
@@ -2112,14 +2118,14 @@ const file_proto_tunnel_proto_rawDesc = "" +
 	"\rDomainRevoked\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12B\n" +
-	"\rrevoke_reason\x18\x03 \x01(\x0e2\x1d.tunnel.v2.DomainRevokeReasonR\frevokeReason\"\xbf\x04\n" +
+	"\rrevoke_reason\x18\x03 \x01(\x0e2\x1d.tunnel.v2.DomainRevokeReasonR\frevokeReason\"\xc3\x04\n" +
 	"\x18DomainVerificationUpdate\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12;\n" +
 	"\x06status\x18\x02 \x01(\x0e2#.tunnel.v2.DomainVerificationStatusR\x06status\x12\x1f\n" +
 	"\vrecord_name\x18\x03 \x01(\tR\n" +
 	"recordName\x12!\n" +
-	"\frecord_value\x18\x04 \x01(\tR\vrecordValue\x12\x1f\n" +
-	"\vttl_seconds\x18\x05 \x01(\rR\n" +
+	"\frecord_value\x18\x04 \x01(\tR\vrecordValue\x12#\n" +
+	"\vttl_seconds\x18\x05 \x01(\rB\x02\x18\x01R\n" +
 	"ttlSeconds\x12+\n" +
 	"\x12expires_at_unix_ms\x18\x06 \x01(\x03R\x0fexpiresAtUnixMs\x123\n" +
 	"\x15verification_attempts\x18\a \x01(\rR\x14verificationAttempts\x12>\n" +

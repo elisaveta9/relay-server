@@ -83,8 +83,6 @@ Go 1.24+ установите из пакетов дистрибутива, snap
    - `RELAY_DATA_QUEUE_HARD_LIMIT` - жесткий порог перегрузки data queue.
    - `RELAY_DNS_CHALLENGE_TTL_SECONDS` - срок действия DNS challenge,
      по умолчанию `86400` секунд.
-   - `RELAY_DNS_INSTRUCTION_TTL_SECONDS` - рекомендуемый TTL создаваемой
-     TXT-записи, по умолчанию `300` секунд.
    - `RELAY_DNS_VERIFY_MIN_INTERVAL_SECONDS` - минимальный интервал между
      ручными DNS-проверками одного challenge, по умолчанию `60` секунд.
    - `RELAY_DNS_VERIFY_INITIAL_INTERVAL_SECONDS` - задержка до первой

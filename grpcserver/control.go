@@ -30,7 +30,6 @@ const (
 	defaultMaxFrameSizeBytes       = 8 * 1024 * 1024
 	defaultPingIntervalSeconds     = 30
 	defaultDNSChallengeTTLSeconds  = 24 * 60 * 60
-	defaultDNSInstructionTTL       = 300
 	defaultMaxActiveDNSChallenges  = 32
 	defaultDNSVerifyMinInterval    = 60 * time.Second
 )
@@ -197,7 +196,7 @@ func (s *ControlServiceImpl) RegisterDomain(
 		if err != nil {
 			return nil, storageError("create DNS proof challenge", err)
 		}
-		return domainRegistrationChallenge(challenge, configuredDNSInstructionTTL()), nil
+		return domainRegistrationChallenge(challenge), nil
 	}
 
 	if proof.GetType() != controlpb.ProofType_PROOF_TYPE_DNS_TXT {
@@ -333,7 +332,6 @@ func domainRegistrationVerificationFailure(
 
 func domainRegistrationChallenge(
 	challenge *storage.DomainOwnershipChallenge,
-	instructionTTL uint32,
 ) *controlpb.DomainRegistrationResponse {
 	return &controlpb.DomainRegistrationResponse{
 		Success:   false,
@@ -343,7 +341,6 @@ func domainRegistrationChallenge(
 			RecordName:      challenge.RecordName,
 			RecordType:      controlpb.DNSRecordType_DNS_RECORD_TYPE_TXT,
 			RecordValue:     challenge.RecordValue,
-			TtlSeconds:      instructionTTL,
 			Purpose:         "relay domain ownership verification",
 			ExpiresAtUnixMs: challenge.ExpiresAt.UnixMilli(),
 		},
@@ -446,10 +443,6 @@ func envInt(key string, def int) int {
 
 func configuredDNSChallengeTTL() time.Duration {
 	return time.Duration(envInt("RELAY_DNS_CHALLENGE_TTL_SECONDS", defaultDNSChallengeTTLSeconds)) * time.Second
-}
-
-func configuredDNSInstructionTTL() uint32 {
-	return uint32(envInt("RELAY_DNS_INSTRUCTION_TTL_SECONDS", defaultDNSInstructionTTL))
 }
 
 func configuredDNSVerifyMinInterval() time.Duration {

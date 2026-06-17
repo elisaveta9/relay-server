@@ -989,13 +989,14 @@ func (x *DomainRegistrationResponse) GetVerification() *DomainVerificationInfo {
 }
 
 type DNSInstruction struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	RecordName      string                 `protobuf:"bytes,1,opt,name=record_name,json=recordName,proto3" json:"record_name,omitempty"`
-	RecordType      DNSRecordType          `protobuf:"varint,2,opt,name=record_type,json=recordType,proto3,enum=control.v2.DNSRecordType" json:"record_type,omitempty"`
-	RecordValue     string                 `protobuf:"bytes,3,opt,name=record_value,json=recordValue,proto3" json:"record_value,omitempty"`
-	TtlSeconds      uint32                 `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
-	Purpose         string                 `protobuf:"bytes,5,opt,name=purpose,proto3" json:"purpose,omitempty"`
-	ExpiresAtUnixMs int64                  `protobuf:"varint,6,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	RecordName  string                 `protobuf:"bytes,1,opt,name=record_name,json=recordName,proto3" json:"record_name,omitempty"`
+	RecordType  DNSRecordType          `protobuf:"varint,2,opt,name=record_type,json=recordType,proto3,enum=control.v2.DNSRecordType" json:"record_type,omitempty"`
+	RecordValue string                 `protobuf:"bytes,3,opt,name=record_value,json=recordValue,proto3" json:"record_value,omitempty"`
+	// Deprecated: Marked as deprecated in proto/control.proto.
+	TtlSeconds      uint32 `protobuf:"varint,4,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	Purpose         string `protobuf:"bytes,5,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	ExpiresAtUnixMs int64  `protobuf:"varint,6,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1051,6 +1052,7 @@ func (x *DNSInstruction) GetRecordValue() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in proto/control.proto.
 func (x *DNSInstruction) GetTtlSeconds() uint32 {
 	if x != nil {
 		return x.TtlSeconds
@@ -1315,14 +1317,14 @@ const file_proto_control_proto_rawDesc = "" +
 	"\x06domain\x18\n" +
 	" \x01(\v2\x16.control.v2.DomainInfoR\x06domain\x12C\n" +
 	"\x0fdns_instruction\x18\v \x01(\v2\x1a.control.v2.DNSInstructionR\x0ednsInstruction\x12F\n" +
-	"\fverification\x18\f \x01(\v2\".control.v2.DomainVerificationInfoR\fverification\"\xf8\x01\n" +
+	"\fverification\x18\f \x01(\v2\".control.v2.DomainVerificationInfoR\fverification\"\xfc\x01\n" +
 	"\x0eDNSInstruction\x12\x1f\n" +
 	"\vrecord_name\x18\x01 \x01(\tR\n" +
 	"recordName\x12:\n" +
 	"\vrecord_type\x18\x02 \x01(\x0e2\x19.control.v2.DNSRecordTypeR\n" +
 	"recordType\x12!\n" +
-	"\frecord_value\x18\x03 \x01(\tR\vrecordValue\x12\x1f\n" +
-	"\vttl_seconds\x18\x04 \x01(\rR\n" +
+	"\frecord_value\x18\x03 \x01(\tR\vrecordValue\x12#\n" +
+	"\vttl_seconds\x18\x04 \x01(\rB\x02\x18\x01R\n" +
 	"ttlSeconds\x12\x18\n" +
 	"\apurpose\x18\x05 \x01(\tR\apurpose\x12+\n" +
 	"\x12expires_at_unix_ms\x18\x06 \x01(\x03R\x0fexpiresAtUnixMs\"\xf1\x01\n" +

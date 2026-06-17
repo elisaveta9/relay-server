@@ -154,7 +154,6 @@ func tunnelDomainVerificationUpdate(
 	if status != storage.DomainOwnershipChallengeStatusVerified {
 		update.RecordName = challenge.RecordName
 		update.RecordValue = challenge.RecordValue
-		update.TtlSeconds = configuredDNSInstructionTTL()
 	}
 	return update
 }
@@ -164,7 +163,6 @@ func controlDNSInstruction(challenge *storage.DomainOwnershipChallenge) *control
 		RecordName:      challenge.RecordName,
 		RecordType:      controlpb.DNSRecordType_DNS_RECORD_TYPE_TXT,
 		RecordValue:     challenge.RecordValue,
-		TtlSeconds:      configuredDNSInstructionTTL(),
 		Purpose:         "relay domain ownership verification",
 		ExpiresAtUnixMs: challenge.ExpiresAt.UnixMilli(),
 	}
