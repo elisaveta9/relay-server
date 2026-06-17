@@ -1,7 +1,9 @@
 package logfile
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 )
@@ -126,4 +128,45 @@ func (w *RotatingWriter) rotate() error {
 
 func backupPath(path string, index int) string {
 	return fmt.Sprintf("%s.%d", path, index)
+}
+
+// TailFile возвращает последние maxBytes байт из файла журнала.
+// Если файл не найден, возвращается пустой результат без ошибки.
+func TailFile(path string, maxBytes int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	start := info.Size() - maxBytes
+	if start < 0 {
+		start = 0
+	}
+
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	// Если чтение началось с середины файла, первая строка может быть неполной.
+	if start > 0 {
+		if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
+			data = data[idx+1:]
+		}
+	}
+
+	return data, nil
 }

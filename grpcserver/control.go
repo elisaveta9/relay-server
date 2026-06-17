@@ -271,6 +271,9 @@ func (s *ControlServiceImpl) RegisterDomain(
 	if errors.Is(err, storage.ErrDomainAlreadyUsed) {
 		return domainRegistrationFailure("domain already belongs to another device", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_DOMAIN_ALREADY_USED), nil
 	}
+	if errors.Is(err, storage.ErrDomainLimitReached) {
+		return domainRegistrationFailure("device domain limit reached", controlpb.ControlErrorCode_CONTROL_ERROR_CODE_RATE_LIMITED), nil
+	}
 	if errors.Is(err, storage.ErrDomainOwnershipChallengeNotFound) ||
 		errors.Is(err, storage.ErrDomainOwnershipChallengeExpired) ||
 		errors.Is(err, storage.ErrDomainOwnershipProofInvalid) {
@@ -297,6 +300,8 @@ func storageError(operation string, err error) error {
 		return status.Errorf(codes.InvalidArgument, "%s: invalid domain", operation)
 	case errors.Is(err, storage.ErrDomainAlreadyUsed):
 		return status.Errorf(codes.AlreadyExists, "%s: domain already belongs to another device", operation)
+	case errors.Is(err, storage.ErrDomainLimitReached):
+		return status.Errorf(codes.ResourceExhausted, "%s: device domain limit reached", operation)
 	case errors.Is(err, storage.ErrDeviceRevoked):
 		return status.Errorf(codes.PermissionDenied, "%s: device is revoked", operation)
 	case errors.Is(err, storage.ErrDomainNotOwned):

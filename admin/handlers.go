@@ -49,7 +49,7 @@ func domainsHandler(repo *storage.Repository) http.HandlerFunc {
 				writeStorageHTTPError(w, err)
 				return
 			}
-			adminLogger.Printf(
+			logAdmin(
 				"ADMIN ADD domain=%s owner=%s ip=%s",
 				created.FQDN, fingerprint, r.RemoteAddr,
 			)
@@ -68,7 +68,7 @@ func domainsHandler(repo *storage.Repository) http.HandlerFunc {
 
 			if existed && deleted != nil {
 				notifyUnboundDevice(repo, deleted.FQDN, "domain deleted")
-				adminLogger.Printf(
+				logAdmin(
 					"ADMIN DELETE domain=%s ip=%s",
 					deleted.FQDN, r.RemoteAddr,
 				)
@@ -96,6 +96,13 @@ func ownerFingerprint(r *http.Request) string {
 func notifyUnboundDevice(repo *storage.Repository, domain string, reason string) {
 	dev, existed := registry.Global.Unbind(domain)
 	if existed && dev != nil {
+		logAdmin(
+			"UNBIND admin domain=%s fingerprint=%s session=%s reason=%q",
+			domain,
+			dev.Fingerprint,
+			dev.SessionID,
+			reason,
+		)
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
 
@@ -152,6 +159,8 @@ func writeStorageHTTPError(w http.ResponseWriter, err error) {
 		http.Error(w, "domain already registered to another device", http.StatusConflict)
 	case errors.Is(err, storage.ErrDeviceRevoked):
 		http.Error(w, "device is revoked", http.StatusForbidden)
+	case errors.Is(err, storage.ErrDomainLimitReached):
+		http.Error(w, "device domain limit reached", http.StatusConflict)
 	default:
 		http.Error(w, "storage error", http.StatusInternalServerError)
 	}

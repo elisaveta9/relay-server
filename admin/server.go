@@ -26,7 +26,7 @@ type ServerConfig struct {
 func NewServer(config ServerConfig, repo *storage.Repository) (*Server, error) {
 	mux := http.NewServeMux()
 
-	mux.Handle("/domains", requireAPIKey(http.HandlerFunc(domainsHandler(repo))))
+	mux.Handle("/domains", requireAPIKey(requireCSRF(http.HandlerFunc(domainsHandler(repo)))))
 	ServeAPIv1(mux, repo)
 
 	enrollHandler, err := newEnrollmentHandler(config.DeviceCAFile, config.DeviceCAKey, repo)

@@ -1,11 +1,18 @@
 package admin
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"strings"
+
+	"relay/auditlog"
 )
+
+const csrfCookieName = "__Host-relay_csrf"
 
 func requireAPIKey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -27,6 +34,55 @@ func requireAPIKey(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func requireCSRF(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		cookie, err := r.Cookie(csrfCookieName)
+		headerToken := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+		if err != nil || cookie.Value == "" || headerToken == "" ||
+			!constantTimeEqual(cookie.Value, headerToken) {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(errorResponse{Error: "invalid csrf token"})
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func csrfTokenHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		http.Error(w, `{"error":"cannot create csrf token"}`, http.StatusInternalServerError)
+		return
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw[:])
+	http.SetCookie(w, &http.Cookie{
+		Name:     csrfCookieName,
+		Value:    token,
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   3600,
+	})
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(struct {
+		Token string `json:"token"`
+	}{Token: token})
 }
 
 func constantTimeEqual(left string, right string) bool {
@@ -61,7 +117,5 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 
 func logAdmin(format string, args ...any) {
-	if adminLogger != nil {
-		adminLogger.Printf(format, args...)
-	}
+	auditlog.Printf(format, args...)
 }

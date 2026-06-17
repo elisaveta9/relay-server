@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"relay/auditlog"
 	"relay/device"
 	"relay/registry"
 	"relay/storage"
@@ -140,6 +141,12 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 
 		for _, domain := range registry.Global.UnbindDevice(dev) {
 			log.Printf("Domain unbound from device: domain=%s fingerprint=%s session=%s\n", domain, dev.Fingerprint, dev.SessionID)
+			auditlog.Printf(
+				"UNBIND session_cleanup domain=%s fingerprint=%s session=%s",
+				domain,
+				dev.Fingerprint,
+				dev.SessionID,
+			)
 
 			if err := s.Store.AddDomainHistoryForFingerprint(
 				ctx,
@@ -169,6 +176,9 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 				"invalid tunnel frame",
 				"frame is nil",
 			)
+		}
+		if dev.IsClosed() {
+			return status.Error(codes.Canceled, "device tunnel was closed by server")
 		}
 		if err := validateTunnelFrameSize(frame, dev.MaxFrameSizeBytes()); err != nil {
 			return rejectDeviceProtocolViolation(
@@ -218,6 +228,13 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 				sendDomainSync(stream.Context(), s.Store, previous)
 			}
 			log.Printf("Domain bound to device: domain=%s fingerprint=%s session=%s\n", domain, dev.Fingerprint, dev.SessionID)
+			auditlog.Printf(
+				"BIND domain=%s fingerprint=%s session=%s replaced=%t",
+				domain,
+				dev.Fingerprint,
+				dev.SessionID,
+				existed && previous != nil && previous != dev,
+			)
 
 			if domainObj != nil {
 				if err := s.Store.AddDomainHistory(
@@ -282,15 +299,7 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 
 		case *tunnelpb.Frame_Ping:
 			if err := dev.SendFrame(stream.Context(), tunnelpb.NewPongFrameForPing(body.Ping)); err != nil {
-				log.Printf(
-					"tunnel pong send failed: fingerprint=%s session=%s err=%v context_canceled=%t transport_closing=%t connection_reset=%t",
-					dev.Fingerprint,
-					dev.SessionID,
-					err,
-					errors.Is(stream.Context().Err(), context.Canceled),
-					isTunnelTransportClosingError(err),
-					isTunnelConnectionResetError(err),
-				)
+				log.Printf("tunnel pong send failed: fingerprint=%s session=%s err=%v", dev.Fingerprint, dev.SessionID, err)
 			}
 
 		case *tunnelpb.Frame_UnbindRequest:
@@ -317,6 +326,12 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 
 			registry.Global.Unbind(domain)
 			log.Printf("Domain unbound by device: domain=%s fingerprint=%s session=%s\n", domain, dev.Fingerprint, dev.SessionID)
+			auditlog.Printf(
+				"UNBIND device domain=%s fingerprint=%s session=%s",
+				domain,
+				dev.Fingerprint,
+				dev.SessionID,
+			)
 
 			if err := s.Store.AddDomainHistoryForFingerprint(
 				stream.Context(),
@@ -399,29 +414,13 @@ func handleStreamReset(dev *device.Device, streamID uint64, reset *tunnelpb.Stre
 }
 
 func logTunnelStreamExit(dev *device.Device, ctx context.Context, err error) {
-	ctxErr := ctx.Err()
-	firstCloseReason := dev.FirstCloseReason()
-	closeReason := dev.CloseReason()
-	writerLastError := dev.WriterLastError()
-
 	log.Printf(
-		"tunnel stream closed: fingerprint=%s session=%s first_close_reason=%q exit_reason=%s initiator=%s err=%v grpc_code=%s context_err=%v context_canceled=%t io_eof=%t transport_closing=%t connection_reset=%t close_reason=%q writer_last_error=%q writer_had_error=%t watchdog_event=%t",
+		"tunnel stream closed: fingerprint=%s session=%s first_close_reason=%q close_reason=%q err=%v",
 		dev.Fingerprint,
 		dev.SessionID,
-		firstCloseReason,
-		tunnelExitReason(err, ctxErr, closeReason, writerLastError),
-		tunnelExitInitiator(err, ctxErr, closeReason, writerLastError),
+		dev.FirstCloseReason(),
+		dev.CloseReason(),
 		err,
-		status.Code(err),
-		ctxErr,
-		errors.Is(ctxErr, context.Canceled) || errors.Is(err, context.Canceled),
-		errors.Is(err, io.EOF),
-		isTunnelTransportClosingError(err) || isTunnelTransportClosingError(ctxErr) || isTunnelTransportClosingMessage(writerLastError),
-		isTunnelConnectionResetError(err) || isTunnelConnectionResetError(ctxErr) || isTunnelConnectionResetMessage(writerLastError),
-		closeReason,
-		writerLastError,
-		writerLastError != "",
-		false,
 	)
 }
 
@@ -452,44 +451,6 @@ func handlerExitCloseReason(ctx context.Context, err error) string {
 		return "grpc_context_done"
 	default:
 		return "handler_exit_error"
-	}
-}
-
-func tunnelExitReason(err error, ctxErr error, closeReason string, writerLastError string) string {
-	switch {
-	case err == nil:
-		return "handler_returned_nil"
-	case errors.Is(err, io.EOF):
-		return "recv_eof"
-	case errors.Is(ctxErr, context.Canceled), errors.Is(err, context.Canceled):
-		return "context_canceled"
-	case isTunnelTransportClosingError(err), isTunnelTransportClosingError(ctxErr), isTunnelTransportClosingMessage(writerLastError):
-		return "transport_closing"
-	case isTunnelConnectionResetError(err), isTunnelConnectionResetError(ctxErr), isTunnelConnectionResetMessage(writerLastError):
-		return "connection_reset"
-	case closeReason != "":
-		return closeReason
-	default:
-		return "handler_error"
-	}
-}
-
-func tunnelExitInitiator(err error, ctxErr error, closeReason string, writerLastError string) string {
-	switch {
-	case strings.HasPrefix(closeReason, "server_"):
-		return "server"
-	case strings.HasPrefix(closeReason, "protocol_"):
-		return "client_protocol_violation"
-	case errors.Is(err, io.EOF):
-		return "client"
-	case errors.Is(ctxErr, context.Canceled), errors.Is(err, context.Canceled):
-		return "transport_or_client"
-	case isTunnelTransportClosingError(err), isTunnelTransportClosingError(ctxErr), isTunnelTransportClosingMessage(writerLastError):
-		return "transport"
-	case isTunnelConnectionResetError(err), isTunnelConnectionResetError(ctxErr), isTunnelConnectionResetMessage(writerLastError):
-		return "network"
-	default:
-		return "unknown"
 	}
 }
 
@@ -616,11 +577,6 @@ func receiveHello(stream tunnelpb.TunnelService_TunnelServer) (*tunnelpb.Hello, 
 
 func sendTunnelError(stream tunnelpb.TunnelService_TunnelServer, code tunnelpb.TunnelErrorCode, message string, details string) error {
 	return stream.Send(tunnelpb.NewTunnelErrorFrame(code, message, details))
-}
-
-func rejectProtocolViolation(stream tunnelpb.TunnelService_TunnelServer, code tunnelpb.TunnelErrorCode, message string, details string) error {
-	_ = sendTunnelError(stream, code, message, details)
-	return protocolViolationStatus(message, details)
 }
 
 func rejectDeviceProtocolViolation(dev *device.Device, code tunnelpb.TunnelErrorCode, message string, details string) error {
