@@ -231,9 +231,7 @@ func handleClientTCP(conn net.Conn) {
 			if rerr != nil {
 				sendClose(tunnelpb.CloseReason_CLOSE_REASON_LOCAL_CLOSED, "")
 
-				if errors.Is(rerr, io.EOF) {
-
-				} else {
+				if !errors.Is(rerr, io.EOF) {
 					log.Println("tunnel read ended:", rerr)
 				}
 				removeStream()

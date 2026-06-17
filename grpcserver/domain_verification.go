@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	defaultDNSInitialVerificationDelay = 30 * time.Second
-	defaultDNSMaxVerificationInterval  = 15 * time.Minute
+	// Ждем немного, чтобы DNS успел обновиться.
+	defaultDNSInitialVerificationDelay = 90 * time.Second
+	defaultDNSMaxVerificationInterval  = 5 * time.Minute
 	defaultDNSVerificationJitterPct    = 10
 	domainVerificationEventsFeature    = "domain-verification-events"
 )

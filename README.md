@@ -72,6 +72,8 @@ Go 1.24+ установите из пакетов дистрибутива, snap
      `expvar`/`pprof` endpoints с Basic Auth. Без обеих переменных debug-сервер
      не запускается.
    - `RELAY_INGRESS_MAX_CONNS` - лимит одновременных public TCP-подключений.
+   - `RELAY_MAX_DOMAINS_PER_DEVICE` - лимит зарегистрированных доменов на
+     устройство.
    - `RELAY_MAX_STREAMS_PER_DEVICE` - лимит активных stream на устройство.
    - `RELAY_CONTROL_QUEUE_SIZE` - размер очереди control frames.
    - `RELAY_DATA_QUEUE_SIZE` - размер очереди data frames.
@@ -277,6 +279,10 @@ relay.
 Для бизнес-аудита нужно использовать эту таблицу, а не `server.log` или
 `admin.log`.
 
+Операционные события активных привязок `BIND`/`UNBIND` дополнительно пишутся в
+`admin.log`, чтобы действия gRPC-туннеля и admin API попадали в единый
+административный audit trail.
+
 ## Логи
 
 `server.log` и `admin.log` - диагностические логи. Они ротируются внутри
@@ -288,20 +294,109 @@ relay.
 
 ## Проверки
 
-Проверить, что домен резолвится в relay:
+В примерах ниже используются условные значения:
+
+- `<DOMAIN>` - пользовательский домен, привязанный к Android-устройству;
+- `<RELAY_IP>` - публичный IP-адрес релейного сервера;
+- `<RELAY_HOST>` - доменное имя релейного сервера, если оно используется отдельно;
+- `<ADMIN_HOST>` - доменное имя административного интерфейса, если он вынесен отдельно.
+
+Пример:
 
 ```powershell
-[System.Net.Dns]::GetHostAddresses("example.android-tunnel.online")
+$DOMAIN = "device.example.com"
+$RELAY_IP = "203.0.113.10"
+$RELAY_HOST = "relay.example.com"
+$ADMIN_HOST = "admin.example.com"
 ```
 
-Проверить ingress напрямую, минуя DNS:
+### Проверка DNS
+
+Проверить, что пользовательский домен резолвится в IP-адрес релейного сервера:
 
 ```powershell
-curl.exe -vk --resolve example.android-tunnel.online:443:192.168.31.250 https://example.android-tunnel.online/
+[System.Net.Dns]::GetHostAddresses($DOMAIN)
 ```
 
-Проверить тесты проекта:
+Альтернативный вариант через `nslookup`:
 
-```bat
+```powershell
+nslookup $DOMAIN
+```
+
+Ожидаемый результат: среди адресов должен быть указан IP-адрес релейного сервера.
+
+### Проверка доступности публичных портов relay
+
+Проверить доступность входного HTTPS-порта:
+
+```powershell
+Test-NetConnection $RELAY_IP -Port 443
+```
+
+Проверить доступность порта туннельного gRPC-сервиса:
+
+```powershell
+Test-NetConnection $RELAY_IP -Port 50051
+```
+
+Проверить доступность административного интерфейса, если он используется:
+
+```powershell
+Test-NetConnection $RELAY_IP -Port 8443
+```
+
+### Проверка обычного HTTPS-запроса через DNS
+
+Проверить, что домен открывается обычным HTTPS-запросом:
+
+```powershell
+curl.exe -vk "https://$DOMAIN/"
+```
+
+Этот запрос использует обычное DNS-разрешение имени.
+
+### Проверка ingress напрямую, минуя DNS
+
+Проверить входной HTTPS-контур relay с принудительной подстановкой IP-адреса:
+
+```powershell
+curl.exe -vk --resolve "${DOMAIN}:443:${RELAY_IP}" "https://$DOMAIN/"
+```
+
+Команда полезна, если DNS-запись ещё не обновилась или требуется проверить
+конкретный relay-сервер. При этом имя домена сохраняется в URL, поэтому TLS
+ClientHello всё равно содержит нужный SNI.
+
+### Проверка тестов проекта
+
+Запустить все Go-тесты:
+
+```powershell
 go test ./...
 ```
+
+Запустить тесты без использования кэша:
+
+```powershell
+go test ./... -count=1
+```
+
+Запустить тесты с проверкой гонок данных:
+
+```powershell
+go test ./... -race
+```
+
+### Проверка под нагрузкой
+
+Если установлен `hey`, можно выполнить базовую нагрузочную проверку:
+
+```powershell
+hey -n 100 -c 10 "https://$DOMAIN/"
+```
+
+Где:
+
+- `-n 100` - всего 100 запросов;
+- `-c 10` - 10 параллельных запросов.

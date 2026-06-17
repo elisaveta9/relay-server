@@ -238,6 +238,15 @@ func (d *Device) Close() {
 	d.CloseWithReason("server_local_close")
 }
 
+func (d *Device) IsClosed() bool {
+	select {
+	case <-d.done:
+		return true
+	default:
+		return false
+	}
+}
+
 func (d *Device) CloseWithReason(reason string) {
 	d.CloseWithFrameReason(nil, reason)
 }
@@ -527,14 +536,11 @@ func (d *Device) sendFrame(f *tunnelpb.Frame) error {
 		d.MarkFirstCloseReason(sendLoopCloseReason(err))
 		d.setWriterLastError(err)
 		log.Printf(
-			"tunnel stream send loop error: fingerprint=%s session=%s frame=%s err=%v transport_closing=%t connection_reset=%t context_canceled=%t",
+			"tunnel stream send loop error: fingerprint=%s session=%s frame=%T err=%v",
 			d.Fingerprint,
 			d.SessionID,
-			frameBodyName(f),
+			f.GetBody(),
 			err,
-			isTransportClosingError(err),
-			isConnectionResetError(err),
-			errors.Is(err, context.Canceled),
 		)
 		return err
 	}
@@ -633,50 +639,6 @@ func envPositiveInt(key string, def int) int {
 	return def
 }
 
-func frameBodyName(f *tunnelpb.Frame) string {
-	if f == nil {
-		return "nil"
-	}
-	switch f.GetBody().(type) {
-	case *tunnelpb.Frame_StreamData:
-		return "stream_data"
-	case *tunnelpb.Frame_StreamOpen:
-		return "stream_open"
-	case *tunnelpb.Frame_StreamClose:
-		return "stream_close"
-	case *tunnelpb.Frame_StreamReset:
-		return "stream_reset"
-	case *tunnelpb.Frame_Hello:
-		return "hello"
-	case *tunnelpb.Frame_Welcome:
-		return "welcome"
-	case *tunnelpb.Frame_Ping:
-		return "ping"
-	case *tunnelpb.Frame_Pong:
-		return "pong"
-	case *tunnelpb.Frame_Goaway:
-		return "goaway"
-	case *tunnelpb.Frame_Error:
-		return "error"
-	case *tunnelpb.Frame_BindRequest:
-		return "bind_request"
-	case *tunnelpb.Frame_BindResult:
-		return "bind_result"
-	case *tunnelpb.Frame_UnbindRequest:
-		return "unbind_request"
-	case *tunnelpb.Frame_UnbindResult:
-		return "unbind_result"
-	case *tunnelpb.Frame_DomainSync:
-		return "domain_sync"
-	case *tunnelpb.Frame_DomainRevoked:
-		return "domain_revoked"
-	case *tunnelpb.Frame_DomainVerificationUpdate:
-		return "domain_verification_update"
-	default:
-		return "unknown"
-	}
-}
-
 func isTransportClosingError(err error) bool {
 	return err != nil && strings.Contains(strings.ToLower(err.Error()), "transport is closing")
 }
@@ -694,7 +656,6 @@ func (d *Device) writer() {
 
 	// Взвешенное планирование, сохраняющее целостность кадров (без их отбрасывания)
 	for {
-		// Terminal frame must be the final frame sent for this tunnel.
 		select {
 		case <-d.done:
 			if d.closeFrame != nil && d.stream != nil {
