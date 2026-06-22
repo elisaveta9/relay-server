@@ -80,7 +80,7 @@ async function ensureCSRFToken() {
   if (!response.ok) throw await responseError(response);
   const payload = await response.json();
   csrfToken = payload.token || "";
-  if (!csrfToken) throw new Error("CSRF token is missing");
+  if (!csrfToken) throw new Error("CSRF-токен отсутствует");
 }
 
 async function apiFetch(path, options = {}) {
@@ -115,23 +115,23 @@ async function connect() {
   try {
     await ensureCSRFToken();
     await loadAll();
-    setStatus("Connected", true);
+    setStatus("Подключено", true);
   } catch (error) {
-    setStatus(`Error: ${error.message}`);
+    setStatus(`Ошибка: ${error.message}`);
   }
 }
 
 async function loadAll() {
   if (!apiKey()) {
-    setStatus("Error: API key is required");
+    setStatus("Ошибка: требуется ключ API");
     return;
   }
-  setStatus("Refreshing...");
+  setStatus("Обновление...");
   try {
     await Promise.all([loadDevices(false), loadSessions(false), loadDomains(false)]);
     setStatus("");
   } catch (error) {
-    setStatus(`Error: ${error.message}`);
+    setStatus(`Ошибка: ${error.message}`);
   }
 }
 
@@ -161,7 +161,7 @@ async function loadDevices(handleError = true) {
     deviceTotalPages = payload.total_pages;
     document.getElementById("deviceCount").textContent = String(payload.total);
     document.getElementById("devicePage").textContent =
-      `Page ${payload.page}${payload.total_pages ? ` of ${payload.total_pages}` : ""}`;
+      `Страница ${payload.page}${payload.total_pages ? ` из ${payload.total_pages}` : ""}`;
     document.getElementById("previousDevices").disabled = payload.page <= 1;
     document.getElementById("nextDevices").disabled =
       payload.total_pages === 0 || payload.page >= payload.total_pages;
@@ -169,26 +169,26 @@ async function loadDevices(handleError = true) {
     for (const device of payload.items) {
       const actions = document.createElement("div");
       actions.className = "row-actions";
-      const sessions = button("Sessions", "secondary");
+      const sessions = button("Сеансы", "secondary");
       sessions.addEventListener("click", () => showDeviceSessions(device.fingerprint));
       actions.appendChild(sessions);
       if (device.status !== "device_status_revoked") {
-        const revoke = button("Revoke", "danger");
+        const revoke = button("Аннулировать", "danger");
         revoke.addEventListener("click", () => revokeDevice(device, revoke));
         actions.appendChild(revoke);
       }
 
       tbody.appendChild(row([
         codeCell(device.fingerprint),
-        badgeCell(device.status, device.status === "device_status_revoked" ? "revoked" : "active"),
-        badgeCell(device.connected ? `${device.active_session_count} active` : "offline", device.connected ? "active" : ""),
+        badgeCell(deviceStatusLabel(device.status), device.status === "device_status_revoked" ? "revoked" : "active"),
+        badgeCell(device.connected ? `${device.active_session_count} активн.` : "не в сети", device.connected ? "active" : ""),
         textCell(String(device.domain_count)),
         textCell(formatDate(device.last_seen_at)),
         nodeCell(actions)
       ]));
     }
   } catch (error) {
-    if (handleError) setStatus(`Error: ${error.message}`);
+    if (handleError) setStatus(`Ошибка: ${error.message}`);
     else throw error;
   }
 }
@@ -207,16 +207,16 @@ function showDeviceSessions(fingerprint) {
 }
 
 async function revokeDevice(device, control) {
-  if (!confirm(`Revoke device ${device.fingerprint}?`)) return;
+  if (!confirm(`Аннулировать устройство ${device.fingerprint}?`)) return;
   control.disabled = true;
   try {
     await apiFetch(`/devices/${encodeURIComponent(device.fingerprint)}/revoke`, {
       method: "POST"
     });
     await Promise.all([loadDevices(false), loadSessions(false), loadDomains(false)]);
-    setStatus("Device revoked", true);
+    setStatus("Устройство аннулировано", true);
   } catch (error) {
-    setStatus(`Error: ${error.message}`);
+    setStatus(`Ошибка: ${error.message}`);
   } finally {
     control.disabled = false;
   }
@@ -230,18 +230,18 @@ async function loadSessions(handleError = true) {
     const tbody = document.getElementById("sessions");
     tbody.replaceChildren();
     document.getElementById("sessionCount").textContent = String(sessions.length);
-    document.getElementById("sessionsTitle").textContent = fingerprint ? "Device sessions" : "Active sessions";
+    document.getElementById("sessionsTitle").textContent = fingerprint ? "Сеансы устройства" : "Активные сеансы";
     for (const session of sessions) {
       tbody.appendChild(row([
         codeCell(session.id),
         codeCell(session.fingerprint),
         textCell(formatDate(session.opened_at)),
         textCell(formatDate(session.closed_at)),
-        badgeCell(session.active ? "active" : "closed", session.active ? "active" : "")
+        badgeCell(session.active ? "активен" : "закрыт", session.active ? "active" : "")
       ]));
     }
   } catch (error) {
-    if (handleError) setStatus(`Error: ${error.message}`);
+    if (handleError) setStatus(`Ошибка: ${error.message}`);
     else throw error;
   }
 }
@@ -278,7 +278,7 @@ async function loadDomains(handleError = true) {
     domainTotalPages = payload.total_pages;
     document.getElementById("domainCount").textContent = String(payload.total);
     document.getElementById("domainPage").textContent =
-      `Page ${payload.page}${payload.total_pages ? ` of ${payload.total_pages}` : ""}`;
+      `Страница ${payload.page}${payload.total_pages ? ` из ${payload.total_pages}` : ""}`;
     document.getElementById("previousDomains").disabled = payload.page <= 1;
     document.getElementById("nextDomains").disabled =
       payload.total_pages === 0 || payload.page >= payload.total_pages;
@@ -286,16 +286,16 @@ async function loadDomains(handleError = true) {
     for (const domain of payload.items) {
       const actions = document.createElement("div");
       actions.className = "row-actions";
-      if (domain.status === "domain_status_registered" || domain.status === "domain_status_bound") {
-        const disable = button("Disable");
+      if (domain.status === "domain_status_registered") {
+        const disable = button("Отключить");
         disable.addEventListener("click", () => setDomainStatus(domain.id, "domain_status_disabled", disable));
         actions.appendChild(disable);
       } else if (domain.status === "domain_status_disabled") {
-        const enable = button("Enable");
+        const enable = button("Включить");
         enable.addEventListener("click", () => setDomainStatus(domain.id, "domain_status_registered", enable));
         actions.appendChild(enable);
       }
-      const remove = button("Delete", "danger");
+      const remove = button("Удалить", "danger");
       remove.addEventListener("click", () => deleteDomain(domain, remove));
       actions.appendChild(remove);
 
@@ -308,14 +308,14 @@ async function loadDomains(handleError = true) {
 
       tbody.appendChild(row([
         nodeCell(fqdn),
-        badgeCell(domain.status, domain.status === "domain_status_disabled" ? "disabled" : "active"),
+        badgeCell(domainStatusLabel(domain.status), domain.status === "domain_status_disabled" ? "disabled" : "active"),
         codeCell(domain.device_fingerprint || domain.device_id),
         textCell(formatDate(domain.created_at)),
         nodeCell(actions)
       ]));
     }
   } catch (error) {
-    if (handleError) setStatus(`Error: ${error.message}`);
+    if (handleError) setStatus(`Ошибка: ${error.message}`);
     else throw error;
   }
 }
@@ -324,7 +324,7 @@ async function addDomain() {
   const fqdn = document.getElementById("newDomain").value.trim();
   const deviceFingerprint = document.getElementById("ownerFingerprint").value.trim();
   if (!fqdn || !deviceFingerprint) {
-    setStatus("Error: FQDN and device fingerprint are required");
+    setStatus("Ошибка: укажите полное доменное имя и отпечаток устройства");
     return;
   }
   try {
@@ -335,9 +335,9 @@ async function addDomain() {
     document.getElementById("newDomain").value = "";
     domainPage = 1;
     await Promise.all([loadDomains(false), loadDevices(false)]);
-    setStatus("Domain added", true);
+    setStatus("Домен добавлен", true);
   } catch (error) {
-    setStatus(`Error: ${error.message}`);
+    setStatus(`Ошибка: ${error.message}`);
   }
 }
 
@@ -349,23 +349,23 @@ async function setDomainStatus(id, status, control) {
       body: JSON.stringify({ status })
     });
     await loadDomains(false);
-    setStatus("Domain updated", true);
+    setStatus("Домен обновлен", true);
   } catch (error) {
-    setStatus(`Error: ${error.message}`);
+    setStatus(`Ошибка: ${error.message}`);
   } finally {
     control.disabled = false;
   }
 }
 
 async function deleteDomain(domain, control) {
-  if (!confirm(`Delete ${domain.fqdn}?`)) return;
+  if (!confirm(`Удалить ${domain.fqdn}?`)) return;
   control.disabled = true;
   try {
     await apiFetch(`/domains/${encodeURIComponent(domain.id)}`, { method: "DELETE" });
     await Promise.all([loadDomains(false), loadDevices(false)]);
-    setStatus("Domain deleted", true);
+    setStatus("Домен удален", true);
   } catch (error) {
-    setStatus(`Error: ${error.message}`);
+    setStatus(`Ошибка: ${error.message}`);
   } finally {
     control.disabled = false;
   }
@@ -437,17 +437,17 @@ async function loadLogs() {
   try {
     const payload = await apiFetch(`/logs?source=${encodeURIComponent(source)}&lines=${lines}`);
     if (!payload || !payload.lines) {
-      output.textContent = "(empty)";
+      output.textContent = "(пусто)";
       return;
     }
-    output.textContent = payload.lines.join("\n") || "(empty)";
+    output.textContent = payload.lines.join("\n") || "(пусто)";
     output.scrollTop = output.scrollHeight;
   } catch (error) {
-    output.textContent = `Error: ${error.message}`;
+    output.textContent = `Ошибка: ${error.message}`;
     // Если логи не читаются, не дергаем сервер дальше.
     if (logAutoRefreshTimer !== null) {
       stopLogAutoRefresh();
-      setStatus(`Log auto-refresh stopped: ${error.message}`);
+      setStatus(`Автообновление журналов остановлено: ${error.message}`);
     }
   }
 }
@@ -465,5 +465,27 @@ function toggleLogAutoRefresh() {
     logAutoRefreshTimer = setInterval(loadLogs, 5000);
   } else {
     stopLogAutoRefresh();
+  }
+}
+
+function deviceStatusLabel(status) {
+  switch (status) {
+    case "device_status_active":
+      return "активно";
+    case "device_status_revoked":
+      return "аннулировано";
+    default:
+      return status || "";
+  }
+}
+
+function domainStatusLabel(status) {
+  switch (status) {
+    case "domain_status_registered":
+      return "зарегистрирован";
+    case "domain_status_disabled":
+      return "отключен";
+    default:
+      return status || "";
   }
 }

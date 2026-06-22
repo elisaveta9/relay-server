@@ -196,6 +196,16 @@ func (s *ControlServiceImpl) RegisterDomain(
 		if err != nil {
 			return nil, storageError("create DNS proof challenge", err)
 		}
+		log.Printf(
+			"DNS verification challenge ready: domain=%s fingerprint=%s challenge_id=%s status=%s attempts=%d next_verification_at=%s expires_at=%s",
+			challenge.FQDN,
+			fingerprint,
+			challenge.ID,
+			challenge.Status,
+			challenge.VerificationAttempts,
+			formatOptionalTime(challenge.NextVerificationAt),
+			challenge.ExpiresAt.Format(time.RFC3339),
+		)
 		return domainRegistrationChallenge(challenge), nil
 	}
 
@@ -235,6 +245,14 @@ func (s *ControlServiceImpl) RegisterDomain(
 	if err != nil {
 		return nil, storageError("begin DNS proof verification", err)
 	}
+	log.Printf(
+		"DNS verification requested by device: domain=%s fingerprint=%s challenge_id=%s attempts=%d record_name=%s",
+		challenge.FQDN,
+		fingerprint,
+		challenge.ID,
+		challenge.VerificationAttempts,
+		challenge.RecordName,
+	)
 
 	records, err := s.txtResolver().LookupTXT(ctx, absoluteDNSName(challenge.RecordName))
 	if err != nil || !containsTXTRecord(records, challenge.RecordValue) {
@@ -257,7 +275,24 @@ func (s *ControlServiceImpl) RegisterDomain(
 			challenge.LastError = message
 			challenge.NextVerificationAt = &next
 			challenge.Device.CertFingerprint = fingerprint
+			log.Printf(
+				"DNS verification retry scheduled by device request: domain=%s fingerprint=%s challenge_id=%s attempts=%d next_verification_at=%s expires_at=%s reason=%q",
+				challenge.FQDN,
+				fingerprint,
+				challenge.ID,
+				challenge.VerificationAttempts,
+				next.Format(time.RFC3339),
+				challenge.ExpiresAt.Format(time.RFC3339),
+				message,
+			)
 			notifyDomainVerificationUpdate(s.Store, challenge, false)
+		} else {
+			log.Printf(
+				"DNS verification device retry skipped because challenge changed: domain=%s fingerprint=%s challenge_id=%s",
+				challenge.FQDN,
+				fingerprint,
+				challenge.ID,
+			)
 		}
 		return domainRegistrationVerificationFailure(
 			message,
@@ -287,6 +322,14 @@ func (s *ControlServiceImpl) RegisterDomain(
 	challenge.LastError = ""
 	challenge.VerifiedAt = &now
 	challenge.Device.CertFingerprint = fingerprint
+	log.Printf(
+		"DNS verification completed by device request: domain=%s fingerprint=%s challenge_id=%s attempts=%d verified_at=%s",
+		challenge.FQDN,
+		fingerprint,
+		challenge.ID,
+		challenge.VerificationAttempts,
+		now.Format(time.RFC3339),
+	)
 	notifyDomainVerificationUpdate(s.Store, challenge, true)
 	return domainRegistrationSuccess(registered), nil
 }

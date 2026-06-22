@@ -1,26 +1,18 @@
-# Relay Server
+# Relay-сервер
 
-Сервер relay принимает публичные TCP/TLS-подключения, читает SNI из
-ClientHello без завершения TLS-сессии и прокидывает поток на подключенное
-устройство через gRPC-туннель. TLS для пользовательского HTTPS завершается на
-стороне устройства, а не на relay-сервере.
+Relay-сервер принимает публичные TCP/TLS-подключения, читает SNI из
+`ClientHello` без завершения TLS-сессии и передает поток на подключенное
+Android-устройство через gRPC-туннель. Пользовательский HTTPS завершается на
+устройстве, а сервер только маршрутизирует трафик.
 
-## Что должно быть установлено
+## Что нужно установить
 
-Для корректной работы сервера на машине с relay нужны:
+- Go 1.24 или новее.
+- PostgreSQL.
+- OpenSSL для генерации локальных сертификатов.
+- На Windows: `cmd.exe` или PowerShell для `.bat`-скриптов.
 
-- Go 1.24 или новее. Скрипты запуска выполняют сервер через `go run .`.
-- PostgreSQL. Сервер подключается к базе из `DATABASE_URL` или
-  `RELAY_DATABASE_DSN`.
-- OpenSSL. Нужен для генерации локальных сертификатов. На Windows
-  `certs\generate_certs.bat` ищет `openssl.exe` в Git for Windows,
-  OpenSSL-Win64/OpenSSL-Win32 или в `PATH`; на Linux используется команда
-  `openssl` или путь из переменной `OPENSSL`.
-- Git for Windows опционален, но удобен: в стандартной установке обычно есть
-  `C:\Program Files\Git\mingw64\bin\openssl.exe`.
-- Windows `cmd.exe`/PowerShell для запуска `.bat`-скриптов.
-
-На Linux установите:
+На Linux зависимости можно поставить так:
 
 ```bash
 # Debian/Ubuntu
@@ -34,21 +26,19 @@ sudo dnf install postgresql-server openssl git
 sudo pacman -S postgresql openssl git
 ```
 
-Go 1.24+ установите из пакетов дистрибутива, snap/asdf/mise или с официального
-сайта Go. После установки команда `go version` должна быть доступна в `PATH`.
+После установки Go команда `go version` должна быть доступна в `PATH`.
 
-Также проверьте сетевые условия:
+Также проверьте, что:
 
-- Порты `443`, `50051` и `8443` должны быть свободны.
-- Firewall/антивирус/роутер должны пропускать входящие подключения на нужные
-  порты.
-- DNS нужных доменов должен указывать на IP relay-сервера.
+- порты `443`, `50051` и `8443` свободны;
+- брандмауэр, антивирус и роутер пропускают входящие подключения на эти порты;
+- DNS нужных доменов указывает на IP-адрес relay-сервера.
 
 ## Локальный запуск
 
 ### Windows
 
-1. Создайте локальный файл окружения:
+1. Создайте локальный файл настроек:
 
    ```bat
    copy .env.example relay.env
@@ -56,89 +46,38 @@ Go 1.24+ установите из пакетов дистрибутива, snap
 
 2. Отредактируйте `relay.env`.
 
-   Обязательные переменные:
+   Минимально нужны:
 
-   - `SECRET_API_KEY` - ключ доступа к admin API, передаваемый как
-     `Authorization: Bearer <key>`.
-   - `DATABASE_URL` или `RELAY_DATABASE_DSN` - строка подключения к PostgreSQL.
+   - `SECRET_API_KEY` - ключ доступа к административному API;
+   - `DATABASE_URL` или `RELAY_DATABASE_DSN` - строка подключения к PostgreSQL;
+   - `RELAY_ENROLLMENT_TOKEN` - токен регистрации устройств.
 
-   Дополнительные переменные:
+   Остальные параметры в `.env.example` задают пути к сертификатам, лимиты и
+   интервалы фоновых проверок. Для обычного локального запуска их можно не
+   менять.
 
-   - `RELAY_ENROLLMENT_TOKEN` - включает endpoint регистрации устройств.
-     Клиент передаёт токен только в JSON-поле `token` запроса `POST /enroll`.
-   - `TLS_CLIENT_AUTH` - режим проверки клиентских сертификатов для gRPC:
-     `require` (по умолчанию) или `request`; режим без client certificate отключен.
-   - `RELAY_DEBUG_USERNAME` и `RELAY_DEBUG_PASSWORD` - включают локальные
-     `expvar`/`pprof` endpoints с Basic Auth. Без обеих переменных debug-сервер
-     не запускается.
-   - `RELAY_INGRESS_MAX_CONNS` - лимит одновременных public TCP-подключений.
-   - `RELAY_MAX_DOMAINS_PER_DEVICE` - лимит зарегистрированных доменов на
-     устройство.
-   - `RELAY_MAX_STREAMS_PER_DEVICE` - лимит активных stream на устройство.
-   - `RELAY_CONTROL_QUEUE_SIZE` - размер очереди control frames.
-   - `RELAY_DATA_QUEUE_SIZE` - размер очереди data frames.
-   - `RELAY_CONTROL_BUDGET` - доля control frames в writer loop.
-   - `RELAY_DATA_BUDGET` - доля data frames в writer loop.
-   - `RELAY_DATA_QUEUE_SOFT_LIMIT` - мягкий порог перегрузки data queue.
-   - `RELAY_DATA_QUEUE_HARD_LIMIT` - жесткий порог перегрузки data queue.
-   - `RELAY_DNS_CHALLENGE_TTL_SECONDS` - срок действия DNS challenge,
-     по умолчанию `86400` секунд.
-   - `RELAY_DNS_VERIFY_MIN_INTERVAL_SECONDS` - минимальный интервал между
-     ручными DNS-проверками одного challenge, по умолчанию `60` секунд.
-   - `RELAY_DNS_VERIFY_INITIAL_INTERVAL_SECONDS` - задержка до первой
-     автоматической проверки, по умолчанию `30` секунд.
-   - `RELAY_DNS_VERIFY_MAX_INTERVAL_SECONDS` - максимальный интервал
-     автоматического backoff, по умолчанию `900` секунд.
-   - `RELAY_DNS_VERIFY_JITTER_PERCENT` - случайное отклонение интервала,
-     по умолчанию `10` процентов.
-   - `RELAY_DNS_VERIFY_WORKER_INTERVAL_SECONDS` - период поиска due challenge,
-     по умолчанию `5` секунд.
-   - `RELAY_DNS_VERIFY_WORKER_BATCH_SIZE` - размер batch фонового worker,
-     по умолчанию `32`.
-   - `RELAY_DNS_VERIFY_WORKER_CONCURRENCY` - максимум параллельных DNS-проверок
-     одного worker, по умолчанию `8`.
-   - `RELAY_DNS_VERIFY_CLAIM_LEASE_SECONDS` - срок резервирования challenge
-     worker-ом, по умолчанию `30` секунд.
-   - `RELAY_DNS_VERIFY_LOOKUP_TIMEOUT_SECONDS` - таймаут одного DNS lookup,
-     по умолчанию `5` секунд.
-   - `RELAY_MAX_ACTIVE_DNS_CHALLENGES_PER_DEVICE` - максимум одновременно
-     активных challenge устройства, по умолчанию `32`.
-   - `RELAY_MAX_DNS_VERIFY_ATTEMPTS_PER_CHALLENGE` - необязательный жесткий
-     лимит прямых запросов проверки. Фоновый worker продолжает проверки
-     до успеха или истечения challenge.
-
-   Повторный запрос регистрации до истечения challenge возвращает то же имя
-   и значение TXT-записи. Новый токен создается только после истечения
-   предыдущего challenge. Автоматические проверки выполняются с
-   backoff `30 секунд, 1, 2, 5, 10 и 15 минут`. Результат сохраняется
-   в PostgreSQL. При живом туннеле устройство получает
-   `DomainVerificationUpdate`, а при следующем подключении актуальные
-   состояния `pending`, `verified` и `expired` передаются в `Welcome`.
-
-3. Создайте базу PostgreSQL, указанную в `DATABASE_URL`.
+3. Создайте базу PostgreSQL, указанную в `relay.env`.
 
    Миграции выполняются автоматически при старте сервера.
 
 4. Сгенерируйте локальные сертификаты:
 
-   ```
+   ```bat
    certs\generate_certs.bat
    ```
 
 5. Запустите сервер:
 
-   ```
+   ```bat
    run_relay.bat
    ```
 
-`run_relay.bat` загружает переменные из `relay.env`, проверяет наличие обязательных
-значений и локальных сертификатов, затем выполняет `go run .`. Если запускать
-`go run .` напрямую, переменные окружения все равно должны быть уже заданы в
-процессе.
+`run_relay.bat` загружает переменные из `relay.env`, проверяет обязательные
+значения и локальные сертификаты, затем выполняет `go run .`.
 
 ### Linux
 
-1. Создайте локальный файл окружения:
+1. Создайте локальный файл настроек:
 
    ```bash
    cp .env.example relay.env
@@ -146,10 +85,7 @@ Go 1.24+ установите из пакетов дистрибутива, snap
 
 2. Отредактируйте `relay.env`.
 
-   Минимально нужны `SECRET_API_KEY` и `DATABASE_URL` или
-   `RELAY_DATABASE_DSN`.
-
-3. Создайте пользователя и базу PostgreSQL под значения из `relay.env`.
+3. Создайте пользователя и базу PostgreSQL.
 
    Пример для локальной разработки:
 
@@ -171,230 +107,106 @@ Go 1.24+ установите из пакетов дистрибутива, snap
    sh run_relay.sh
    ```
 
-Если хотите запускать скрипты напрямую, выставьте executable bit:
+Если хотите запускать скрипты напрямую, добавьте право на исполнение:
 
 ```bash
 chmod +x run_relay.sh certs/generate_certs.sh
 ./run_relay.sh
 ```
 
-На Linux порт `443` является privileged port. Если сервер запускается не от
-root, выдайте бинарнику capability или используйте systemd unit с нужными
-правами. Для локальной проверки проще временно запускать через `sudo`, но для
-production лучше не держать весь процесс под root.
+На Linux порт `443` является привилегированным. Для локальной проверки проще
+запустить сервер через `sudo` или временно поменять порт. Для production-сервера
+лучше выдать нужное право только бинарному файлу или настроить запуск через
+systemd.
 
 ## Порты
 
 Сервер слушает:
 
-- `:443` - публичный TCP ingress для HTTPS passthrough.
-- `:50051` - gRPC-туннель для устройств.
-- `:8443` - admin UI/API.
-- `127.0.0.1:6060` - локальные debug endpoints: `expvar` и `pprof`; сервер
-  запускается только с `RELAY_DEBUG_USERNAME` и `RELAY_DEBUG_PASSWORD`.
+- `:443` - публичный входящий HTTPS-трафик;
+- `:50051` - gRPC-туннель для устройств;
+- `:8443` - административный интерфейс и API.
 
 ## Сертификаты
 
-Каталог `certs` предназначен для локальных и сгенерированных TLS-файлов.
-Сгенерированные `.key`, `.crt`, `.csr`, `.srl` и `.cnf` игнорируются git.
-В репозитории хранятся только скрипты генерации:
-`certs\generate_certs.bat` для Windows и `certs/generate_certs.sh` для Linux.
+Каталог `certs` предназначен для локальных TLS-файлов. Сгенерированные ключи и
+сертификаты не хранятся в репозитории.
 
-Для локальной разработки на Windows используйте:
+Скрипт генерации создает:
 
-```bat
-certs\generate_certs.bat
-```
+- `ca.crt` / `ca.key` - локальный центр сертификации для устройств;
+- `server.crt` / `server.key` - сертификат gRPC-сервера;
+- `admin.crt` / `admin.key` - сертификат административного HTTPS-сервера;
+- `admin-chain.crt` - цепочку сертификатов для браузеров и утилит.
 
-На Linux используйте:
+На production-сервере для административного интерфейса, API и gRPC можно
+использовать обычные сертификаты, например Let's Encrypt. Отдельный CA для
+устройств все равно нужен: он выпускает и проверяет клиентские сертификаты
+Android-клиентов.
 
-```bash
-sh certs/generate_certs.sh
-```
-
-Скрипт создает:
-
-- `ca.crt` / `ca.key` - локальный CA для relay.
-- `server.crt` / `server.key` - сертификат gRPC-сервера.
-- `admin.crt` / `admin.key` - сертификат admin HTTPS-сервера.
-- `admin-chain.crt` - цепочка для браузеров и инструментов, которым нужен CA.
-
-Для production лучше использовать реальные сертификаты для публичных HTTPS
-endpoint'ов. Сертификаты Let's Encrypt могут заменить `certs/admin.crt` и
-`certs/admin.key`, если admin UI/API открыт наружу. gRPC-туннель также может
-использовать публичный server certificate, но `certs/ca.crt` все равно нужен
-для проверки клиентских сертификатов устройств при `TLS_CLIENT_AUTH=require`.
-
-Пути задаются через переменные:
+Пути к сертификатам задаются в `relay.env`:
 
 - `RELAY_GRPC_CERT_FILE` и `RELAY_GRPC_KEY_FILE`;
 - `RELAY_ADMIN_CERT_FILE` и `RELAY_ADMIN_KEY_FILE`;
-- `RELAY_DEVICE_CA_CERT_FILE` для проверки клиентских сертификатов;
-- `RELAY_DEVICE_CA_KEY_FILE` для endpoint регистрации устройств.
+- `RELAY_DEVICE_CA_CERT_FILE`;
+- `RELAY_DEVICE_CA_KEY_FILE`.
 
-Пример для VPS, где gRPC и admin используют один публичный hostname:
+## Домены
 
-```text
-RELAY_GRPC_CERT_FILE=/etc/letsencrypt/live/relay.example.com/fullchain.pem
-RELAY_GRPC_KEY_FILE=/etc/letsencrypt/live/relay.example.com/privkey.pem
-RELAY_ADMIN_CERT_FILE=/etc/letsencrypt/live/relay.example.com/fullchain.pem
-RELAY_ADMIN_KEY_FILE=/etc/letsencrypt/live/relay.example.com/privkey.pem
-RELAY_DEVICE_CA_CERT_FILE=/etc/relay/pki/device-ca.crt
-RELAY_DEVICE_CA_KEY_FILE=/etc/relay/pki/device-ca.key
-```
+Устройство регистрирует домен через административный API. Сервер создает DNS-проверку,
+ждет TXT-запись и после успешной проверки начинает принимать трафик для этого
+домена.
 
-Let's Encrypt не заменяет device CA: публичный сертификат защищает серверные
-endpoint, а отдельный CA выпускает и проверяет клиентские сертификаты
-устройств. Закрытый ключ device CA должен быть доступен только пользователю
-relay.
-
-При `SIGTERM` сервер прекращает принимать новые ingress-соединения, отправляет
-подключенным устройствам `GoAway`, по умолчанию ждёт 5 секунд и затем корректно
-останавливает gRPC, admin, ingress и debug-серверы. Параметры:
-
-- `RELAY_GOAWAY_PLANNED_RETRY_AFTER_SECONDS` - когда устройству пробовать
-  переподключиться;
-- `RELAY_GOAWAY_SHUTDOWN_DRAIN_MS` - время доставки `GoAway` и завершения
-  текущего обмена;
-- `RELAY_SHUTDOWN_TIMEOUT_SECONDS` - общий предел финального завершения.
-
-## Состояние доменов и история
-
-Таблица `domains` хранит текущего владельца домена и операционный статус.
-Записи удаляются мягко, поэтому один и тот же FQDN можно позже зарегистрировать
-на другое устройство без потери истории.
-
-Таблица `domain_histories` хранит append-only аудит жизненного цикла домена:
-
-- `REGISTER`
-- `BIND`
-- `UNBIND`
-- `ENABLE`
-- `DISABLE`
-- `DELETE`
-
-Записи истории сохраняют `fqdn`, а при наличии также `domain_id` и `device_id`.
-Для бизнес-аудита нужно использовать эту таблицу, а не `server.log` или
-`admin.log`.
-
-Операционные события активных привязок `BIND`/`UNBIND` дополнительно пишутся в
-`admin.log`, чтобы действия gRPC-туннеля и admin API попадали в единый
-административный audit trail.
+Текущее состояние доменов хранится в таблице `domains`. История действий
+сохраняется в `domain_histories`, поэтому для аудита нужно смотреть базу, а не
+текстовые логи.
 
 ## Логи
 
-`server.log` и `admin.log` - диагностические логи. Они ротируются внутри
-процесса: текущий файл переименовывается в `.1`, старые backup-файлы сдвигаются
-дальше, по умолчанию хранится не больше пяти backup-файлов.
+Сервер пишет диагностические логи в:
 
-Эти логи полезны для отладки и эксплуатации, но не являются источником истины
-для владения доменами или истории их изменений.
+- `server.log`;
+- `admin.log`.
+
+Файлы ротируются внутри процесса. Логи удобны для отладки, но не являются
+источником истины для владения доменами и истории изменений.
 
 ## Проверки
 
 В примерах ниже используются условные значения:
 
 - `<DOMAIN>` - пользовательский домен, привязанный к Android-устройству;
-- `<RELAY_IP>` - публичный IP-адрес релейного сервера;
-- `<RELAY_HOST>` - доменное имя релейного сервера, если оно используется отдельно;
-- `<ADMIN_HOST>` - доменное имя административного интерфейса, если он вынесен отдельно.
+- `<RELAY_IP>` - публичный IP-адрес relay-сервера.
 
-Пример:
+В PowerShell можно задать переменные так:
 
 ```powershell
 $DOMAIN = "device.example.com"
 $RELAY_IP = "203.0.113.10"
-$RELAY_HOST = "relay.example.com"
-$ADMIN_HOST = "admin.example.com"
 ```
 
-### Проверка DNS
-
-Проверить, что пользовательский домен резолвится в IP-адрес релейного сервера:
-
-```powershell
-[System.Net.Dns]::GetHostAddresses($DOMAIN)
-```
-
-Альтернативный вариант через `nslookup`:
+Проверить DNS:
 
 ```powershell
 nslookup $DOMAIN
 ```
 
-Ожидаемый результат: среди адресов должен быть указан IP-адрес релейного сервера.
-
-### Проверка доступности публичных портов relay
-
-Проверить доступность входного HTTPS-порта:
+Проверить доступность портов:
 
 ```powershell
 Test-NetConnection $RELAY_IP -Port 443
-```
-
-Проверить доступность порта туннельного gRPC-сервиса:
-
-```powershell
 Test-NetConnection $RELAY_IP -Port 50051
-```
-
-Проверить доступность административного интерфейса, если он используется:
-
-```powershell
 Test-NetConnection $RELAY_IP -Port 8443
 ```
 
-### Проверка обычного HTTPS-запроса через DNS
-
-Проверить, что домен открывается обычным HTTPS-запросом:
+Проверить HTTPS-запрос через обычный DNS:
 
 ```powershell
 curl.exe -vk "https://$DOMAIN/"
 ```
 
-Этот запрос использует обычное DNS-разрешение имени.
-
-### Проверка ingress напрямую, минуя DNS
-
-Проверить входной HTTPS-контур relay с принудительной подстановкой IP-адреса:
+Проверить конкретный relay-сервер, даже если DNS еще не обновился:
 
 ```powershell
 curl.exe -vk --resolve "${DOMAIN}:443:${RELAY_IP}" "https://$DOMAIN/"
 ```
-
-Команда полезна, если DNS-запись ещё не обновилась или требуется проверить
-конкретный relay-сервер. При этом имя домена сохраняется в URL, поэтому TLS
-ClientHello всё равно содержит нужный SNI.
-
-### Проверка тестов проекта
-
-Запустить все Go-тесты:
-
-```powershell
-go test ./...
-```
-
-Запустить тесты без использования кэша:
-
-```powershell
-go test ./... -count=1
-```
-
-Запустить тесты с проверкой гонок данных:
-
-```powershell
-go test ./... -race
-```
-
-### Проверка под нагрузкой
-
-Если установлен `hey`, можно выполнить базовую нагрузочную проверку:
-
-```powershell
-hey -n 100 -c 10 "https://$DOMAIN/"
-```
-
-Где:
-
-- `-n 100` - всего 100 запросов;
-- `-c 10` - 10 параллельных запросов.

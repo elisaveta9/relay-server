@@ -30,9 +30,6 @@ type Server struct {
 func NewServer(addr string, tlsCfg *tls.Config, repo *storage.Repository) (*Server, error) {
 	const (
 		maxConcurrentStreams = 1024
-
-		maxConnectionAge      = 30 * time.Minute
-		maxConnectionAgeGrace = 5 * time.Minute
 	)
 
 	grpcServer := grpc.NewServer(
@@ -44,10 +41,8 @@ func NewServer(addr string, tlsCfg *tls.Config, repo *storage.Repository) (*Serv
 		grpc.MaxSendMsgSize(grpcMaxMessageSizeBytes),
 
 		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:                  30 * time.Second,
-			Timeout:               10 * time.Second,
-			MaxConnectionAge:      maxConnectionAge,
-			MaxConnectionAgeGrace: maxConnectionAgeGrace,
+			Time:    30 * time.Second,
+			Timeout: 10 * time.Second,
 		}),
 
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{

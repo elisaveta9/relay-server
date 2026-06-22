@@ -118,7 +118,7 @@ func handleListDomains(w http.ResponseWriter, r *http.Request, repo *storage.Rep
 		out = append(out, domainListResponseItem{
 			ID:                d.ID.String(),
 			FQDN:              d.FQDN,
-			Status:            d.Status,
+			Status:            adminDomainStatus(d.Status),
 			DeviceID:          d.DeviceID.String(),
 			DeviceFingerprint: d.Device.CertFingerprint,
 			CreatedAt:         d.CreatedAt,
@@ -162,7 +162,7 @@ func domainListOptionsFromRequest(r *http.Request) (storage.DomainListOptions, e
 	if raw := strings.TrimSpace(query.Get("status")); raw != "" {
 		status := storage.DomainStatus(raw)
 		switch status {
-		case storage.DomainStatusRegistered, storage.DomainStatusBound, storage.DomainStatusDisabled:
+		case storage.DomainStatusRegistered, storage.DomainStatusDisabled:
 			options.Status = &status
 		default:
 			return options, errors.New("invalid status")
@@ -227,7 +227,7 @@ func handleGetDomainByID(w http.ResponseWriter, r *http.Request, repo *storage.R
 	resp := domainCreateResponse{
 		ID:        d.ID.String(),
 		FQDN:      d.FQDN,
-		Status:    d.Status,
+		Status:    adminDomainStatus(d.Status),
 		DeviceID:  d.DeviceID.String(),
 		CreatedAt: d.CreatedAt,
 	}
@@ -261,7 +261,7 @@ func handleCreateDomain(w http.ResponseWriter, r *http.Request, repo *storage.Re
 	resp := domainCreateResponse{
 		ID:        created.ID.String(),
 		FQDN:      created.FQDN,
-		Status:    created.Status,
+		Status:    adminDomainStatus(created.Status),
 		DeviceID:  created.DeviceID.String(),
 		CreatedAt: created.CreatedAt,
 	}
@@ -302,7 +302,7 @@ func handlePatchDomain(w http.ResponseWriter, r *http.Request, repo *storage.Rep
 	resp := domainCreateResponse{
 		ID:        updated.ID.String(),
 		FQDN:      updated.FQDN,
-		Status:    updated.Status,
+		Status:    adminDomainStatus(updated.Status),
 		DeviceID:  updated.DeviceID.String(),
 		CreatedAt: updated.CreatedAt,
 	}
@@ -331,11 +331,18 @@ func handleDeleteDomain(w http.ResponseWriter, r *http.Request, repo *storage.Re
 	resp := domainCreateResponse{
 		ID:        deleted.ID.String(),
 		FQDN:      deleted.FQDN,
-		Status:    deleted.Status,
+		Status:    adminDomainStatus(deleted.Status),
 		DeviceID:  deleted.DeviceID.String(),
 		CreatedAt: deleted.CreatedAt,
 	}
 	writeJSONResponse(w, resp)
+}
+
+func adminDomainStatus(status storage.DomainStatus) storage.DomainStatus {
+	if status == storage.DomainStatusBound {
+		return storage.DomainStatusRegistered
+	}
+	return status
 }
 
 func writeStorageHTTPErrorJSON(w http.ResponseWriter, err error) {

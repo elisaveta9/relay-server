@@ -215,6 +215,13 @@ func unixMilli(value *time.Time) int64 {
 	return value.UnixMilli()
 }
 
+func formatOptionalTime(value *time.Time) string {
+	if value == nil {
+		return ""
+	}
+	return value.Format(time.RFC3339)
+}
+
 func notifyDomainVerificationUpdate(
 	repo *storage.Repository,
 	challenge *storage.DomainOwnershipChallenge,
@@ -247,7 +254,23 @@ func sendDomainVerificationUpdate(
 				dev.SessionID,
 				err,
 			)
+		} else {
+			log.Printf(
+				"sent domain verification update: domain=%s status=%s fingerprint=%s session=%s sync_domains=%t",
+				challenge.FQDN,
+				effectiveDomainOwnershipChallengeStatus(challenge),
+				dev.Fingerprint,
+				dev.SessionID,
+				syncDomains,
+			)
 		}
+	} else {
+		log.Printf(
+			"skip domain verification update: domain=%s fingerprint=%s session=%s reason=feature_not_supported",
+			challenge.FQDN,
+			dev.Fingerprint,
+			dev.SessionID,
+		)
 	}
 	if syncDomains {
 		sendDomainSync(ctx, repo, dev)

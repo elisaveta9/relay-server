@@ -116,7 +116,7 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 	dev.SetSupportedFeatures(hello.GetSupportedFeatures())
 	registry.Global.RegisterDevice(dev)
 	log.Printf(
-		"tunnel stream opened: fingerprint=%s session=%s client_version=%q protocol_version=%d max_streams=%d max_frame_size_bytes=%d ping_interval_seconds=%d",
+		"tunnel stream opened: fingerprint=%s session=%s client_version=%q protocol_version=%d max_streams=%d max_frame_size_bytes=%d ping_interval_seconds=%d supports_domain_verification_events=%t",
 		fingerprint,
 		dev.SessionID,
 		hello.GetClientVersion(),
@@ -124,6 +124,7 @@ func (s *TunnelServiceImpl) Tunnel(stream tunnelpb.TunnelService_TunnelServer) (
 		limits.maxStreams,
 		limits.maxFrameSizeBytes,
 		limits.pingIntervalSeconds,
+		dev.SupportsFeature(domainVerificationEventsFeature),
 	)
 	log.Printf("Device connected: fingerprint=%s session=%s\n", fingerprint, dev.SessionID)
 
