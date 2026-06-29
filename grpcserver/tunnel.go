@@ -632,8 +632,8 @@ func effectiveTunnelLimits(hello *tunnelpb.Hello) tunnelLimits {
 	}
 
 	pingInterval := uint32(envInt("RELAY_PING_INTERVAL_SECONDS", defaultPingIntervalSeconds))
-	if hello.GetPreferredPingIntervalSeconds() > 0 && hello.GetPreferredPingIntervalSeconds() > pingInterval {
-		pingInterval = hello.GetPreferredPingIntervalSeconds()
+	if preferred := hello.GetPreferredPingIntervalSeconds(); preferred > 0 && preferred < pingInterval {
+		pingInterval = preferred
 	}
 
 	return tunnelLimits{

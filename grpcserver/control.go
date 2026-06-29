@@ -28,7 +28,7 @@ const (
 	supportedTunnelProtocolVersion = 2
 	defaultMaxStreamsPerDevice     = 128
 	defaultMaxFrameSizeBytes       = 8 * 1024 * 1024
-	defaultPingIntervalSeconds     = 30
+	defaultPingIntervalSeconds     = 10
 	defaultDNSChallengeTTLSeconds  = 24 * 60 * 60
 	defaultMaxActiveDNSChallenges  = 32
 	defaultDNSVerifyMinInterval    = 60 * time.Second
